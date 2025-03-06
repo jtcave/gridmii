@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "gridmii.h"
+#include "gm-node.h"
 
 void transfer_to_stdout(struct job *jobspec, int source_fd, char *buffer, size_t readsize) {
     if (source_fd == jobspec->job_stderr) {

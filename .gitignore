@@ -1,6 +1,6 @@
 # output files
 *.o
-gridmii
+gm-node
 
 # vscode junk
 .vscode/*

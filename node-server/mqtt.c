@@ -11,7 +11,7 @@
 
 #include <mosquitto.h>
 
-#include "gridmii.h"
+#include "gm-node.h"
 
 // global mosquitto object
 struct mosquitto *gm_mosq = NULL;

@@ -14,7 +14,7 @@
 
 #include <mosquitto.h>
 
-#include "gridmii.h"
+#include "gm-node.h"
 
 void exit_cleanup(void) {
     // clean up job scripts

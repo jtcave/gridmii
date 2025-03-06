@@ -10,7 +10,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "gridmii.h"
+#include "gm-node.h"
 
 
 // no-op write callback

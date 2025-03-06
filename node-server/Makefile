@@ -1,11 +1,11 @@
 CFLAGS=-Wall -g
 LDLIBS=-lmosquitto
 
-all: gridmii
+all: gm-node
 
-gridmii: gridmii.h  mqtt.c jobs.c eventloop.c controller.c gridmii.c
+gm-node: gm-node.h  mqtt.c jobs.c eventloop.c controller.c gm-node.c
 
 clean:
-	rm -f gridmii *.o
+	rm -f gm-node *.o
 
 .PHONY: clean

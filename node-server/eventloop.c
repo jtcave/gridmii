@@ -7,7 +7,7 @@
 #include <poll.h>
 #include <errno.h>
 #include <err.h>
-#include "gridmii.h"
+#include "gm-node.h"
 
 void do_mqtt_events();
 
