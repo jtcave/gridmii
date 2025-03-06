@@ -16,9 +16,6 @@
 
 #include "gridmii.h"
 
-// global mosquitto object
-struct mosquitto *gm_mosq = NULL;
-
 void transfer_to_stdout(struct job *jobspec, int source_fd, char *buffer, size_t readsize) {
     if (source_fd == jobspec->job_stderr) {
         // stderr to stderr
@@ -39,7 +36,7 @@ void exit_cleanup(void) {
 
 // TODO: actually wire this up
 void sigint_cleanup(int signum) {
-    gm_shutdown(gm_mosq);
+    gm_shutdown();
 }
 
 int main(int argc, char *const *argv) {
@@ -49,10 +46,10 @@ int main(int argc, char *const *argv) {
     init_job_table();
 
     printf("starting mqtt...");
-    gm_mosq = gm_init_mqtt();
-    gm_connect_mqtt(gm_mosq);
+    gm_init_mqtt();
+    gm_connect_mqtt();
 
     for(;;) {
-        gm_do_events(gm_mosq);
+        gm_do_events();
     }
 }

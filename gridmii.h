@@ -29,21 +29,26 @@
 
 /// declarations - mqtt ///
 
+// global mosquitto object
+// TODO: if we have this, then do we need all these `struct mosquitto *` params everywhere?
+extern struct mosquitto *gm_mosq;
+
 // Initialize and configure a mosquitto object
+// Store that object in global variable `gm_mosq`, and also return it
 struct mosquitto *gm_init_mqtt(void);
 
 // Connect to the broker and subscribe to topics
-void gm_connect_mqtt(struct mosquitto *mosq);
+void gm_connect_mqtt(void);
 
 // Process MQTT events. This is to be called by the main event loop after polling the socket.
 // mosq - a mosquitto object
 // revents - the `revents` field from the poll(2) call pertaining to the socket
-void gm_process_mqtt(struct mosquitto *mosq, short revents);
+void gm_process_mqtt(short revents);
 
 // disconnect from the broker and shut the server down
-void gm_shutdown(struct mosquitto *mosq);
+void gm_shutdown(void);
 
-/// declarations - job table///
+/// declarations - job table ///
 
 // forward declare `struct job` because we need it as a paraneter for callbacks, which are
 // members of the struct
@@ -79,7 +84,7 @@ void do_job_events(void);
 /// declarations - event loop ///
 
 // body of event loop
-void gm_do_events(struct mosquitto *mosq);
+void gm_do_events(void);
 
 /// declarations - message response controller
 

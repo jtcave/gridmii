@@ -13,7 +13,13 @@
 
 #include "gridmii.h"
 
+// global mosquitto object
+struct mosquitto *gm_mosq = NULL;
+
 const char *node_name(void);
+bool mqtt_initialized(void);
+void assert_mqtt_initialized(void);
+
 void has_connected(struct mosquitto *mosq, void *obj, int rc);
 void has_published(struct mosquitto *mosq, void *obj, int mid);
 void has_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *message);
@@ -35,6 +41,18 @@ const char *node_name() {
     return nodebuffer;
 }
 
+// returhs false if MQTT hasn't been initialized - that is, if `gm_mosq` is still NULL;
+bool mqtt_initialized() {
+    return gm_mosq != NULL;
+}
+
+// sanity check for initialized MQTT
+void assert_mqtt_initialized(void) {
+    if (!mqtt_initialized()) {
+        errx(1, "internal error - MQTT not initialized");
+    }
+}
+
 struct mosquitto *gm_init_mqtt(void) {
     int rv;
 
@@ -42,34 +60,36 @@ struct mosquitto *gm_init_mqtt(void) {
     if (mosquitto_lib_init() != MOSQ_ERR_SUCCESS) {
         errx(1, "could not initialize mosquitto library");
     }
-    struct mosquitto *mosq = mosquitto_new("gridmii-demo", false, NULL);
-    if (mosq == NULL) {
+    gm_mosq = mosquitto_new("gridmii-demo", false, NULL);
+    if (gm_mosq == NULL) {
         err(1, "could not create mosquitto client object");
     }
 
     // wire up callbacks
-    mosquitto_connect_callback_set(mosq, has_connected);
-    mosquitto_publish_callback_set(mosq, has_published);
-    mosquitto_subscribe_callback_set(mosq, has_subscribed);
-    mosquitto_message_callback_set(mosq, has_message);
+    mosquitto_connect_callback_set(gm_mosq, has_connected);
+    mosquitto_publish_callback_set(gm_mosq, has_published);
+    mosquitto_subscribe_callback_set(gm_mosq, has_subscribed);
+    mosquitto_message_callback_set(gm_mosq, has_message);
 
     
     // declare last will of client
     // TODO: what level of QoS for the will? What topic?
     const char *client_name = node_name();
-    rv = mosquitto_will_set(mosq, "disconnect", strlen(client_name), client_name, 0, false);
+    rv = mosquitto_will_set(gm_mosq, "disconnect", strlen(client_name), client_name, 0, false);
     if (rv != MOSQ_ERR_SUCCESS) {
         errx(1, "could not set last will, mosq_err_t = %d", rv);
     }
 
-    // mosquitto_username_pw_set(mosq, "username", "password");
+    // mosquitto_username_pw_set(gm_mosq, "username", "password");
 
-    return mosq;
+    return gm_mosq;
 }
 
-void gm_connect_mqtt(struct mosquitto *mosq) {
+void gm_connect_mqtt() {
+    assert_mqtt_initialized();
+
     // connect
-    int rv = mosquitto_connect(mosq, GRID_HOST, GRID_PORT, 60);
+    int rv = mosquitto_connect(gm_mosq, GRID_HOST, GRID_PORT, 60);
     if (rv == MOSQ_ERR_ERRNO) {
         err(1, "could not connect to broker");
     }
@@ -80,13 +100,13 @@ void gm_connect_mqtt(struct mosquitto *mosq) {
     // subscribe to topics
     // TODO: topic hierarchy
 
-    rv = mosquitto_subscribe(mosq, NULL, "test/gridmii", 2);
+    rv = mosquitto_subscribe(gm_mosq, NULL, "test/gridmii", 2);
     if (rv != MOSQ_ERR_SUCCESS) {
         errx(1, "could not subscribe, mosq_err_t = %d", rv);
     }
 }
 
-void gm_process_mqtt(struct mosquitto *mosq, short revents) {
+void gm_process_mqtt(short revents) {
     // process events for mqtt socket
     // TODO: make the error handling more robust and less repetitive
     int rv;
@@ -96,7 +116,7 @@ void gm_process_mqtt(struct mosquitto *mosq, short revents) {
         //running = false;
     }
     if (revents & POLLIN) {
-        rv = mosquitto_loop_read(mosq, 1);
+        rv = mosquitto_loop_read(gm_mosq, 1);
         if (rv == MOSQ_ERR_ERRNO) {
             err(1, "could not perform read ops");
         }
@@ -105,7 +125,7 @@ void gm_process_mqtt(struct mosquitto *mosq, short revents) {
         }
     }
     if (revents & POLLOUT) {
-        rv = mosquitto_loop_write(mosq, 1);
+        rv = mosquitto_loop_write(gm_mosq, 1);
         if (rv == MOSQ_ERR_ERRNO) {
             err(1, "could not perform read ops");
         }
@@ -114,7 +134,7 @@ void gm_process_mqtt(struct mosquitto *mosq, short revents) {
         }
     }
 
-    rv = mosquitto_loop_misc(mosq);
+    rv = mosquitto_loop_misc(gm_mosq);
     if (rv == MOSQ_ERR_ERRNO) {
         err(1, "could not perform read ops");
     }
@@ -146,7 +166,7 @@ void has_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messa
 
     // exit on magic word
     if (strcmp(payload, "exit") == 0) {
-        gm_shutdown(mosq);
+        gm_shutdown();
     }
 
     // otherwise just spawn a process
@@ -163,13 +183,14 @@ void has_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messa
 
 // TODO: move this somewhere else
 
-void gm_shutdown(struct mosquitto *mosq) {
-    int rv = mosquitto_disconnect(mosq);
+void gm_shutdown() {
+    int rv = mosquitto_disconnect(gm_mosq);
     if (rv != MOSQ_ERR_SUCCESS) {
         errx(1, "could not disconnect from broker, mosq_err_t = %dß", rv);
     }
 
-    mosquitto_destroy(mosq);
+    mosquitto_destroy(gm_mosq);
+    gm_mosq = NULL;
     mosquitto_lib_cleanup();
 
     exit(0);

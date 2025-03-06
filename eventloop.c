@@ -9,15 +9,15 @@
 #include <err.h>
 #include "gridmii.h"
 
-void do_mqtt_events(struct mosquitto *mosq);
+void do_mqtt_events();
 
-void gm_do_events(struct mosquitto *mosq) {
-    do_mqtt_events(mosq);
+void gm_do_events() {
+    do_mqtt_events();
     do_job_events();
 }
 
-void do_mqtt_events(struct mosquitto *mosq) {
-    int fd = mosquitto_socket(mosq);
+void do_mqtt_events() {
+    int fd = mosquitto_socket(gm_mosq);
     if (fd == -1) {
         err(1, "could not get socket from mosquitto object");
     }
@@ -27,7 +27,7 @@ void do_mqtt_events(struct mosquitto *mosq) {
     pfd.events = POLLIN;
 
     // only poll for write if there's something that needs written
-    if (mosquitto_want_write(mosq)) {
+    if (mosquitto_want_write(gm_mosq)) {
         pfd.events = POLLIN | POLLOUT;
     }
     else {
@@ -43,5 +43,5 @@ void do_mqtt_events(struct mosquitto *mosq) {
             err(1, "could not poll()");
         }
     }
-    gm_process_mqtt(mosq, pfd.revents);
+    gm_process_mqtt(pfd.revents);
 }
