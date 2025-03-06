@@ -26,6 +26,7 @@ void has_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messa
 void has_subscribed(struct mosquitto *mosq, void *obj, int mid, int qos_count, const int *granted_qos);
 
 // get the client name for mqtt (currently the system hostname)
+// TODO: truncate to MOSQ_MQTT_ID_MAX_LENGTH
 const char *node_name() {
     // host names are up to 255 characters on macOS/NetBSD, 64 on Linux
     static char nodebuffer[256] = {0};
@@ -158,27 +159,8 @@ void has_subscribed(struct mosquitto *mosq, void *obj, int mid, int qos_count, c
 }
 
 void has_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *message) {
-    static char payload[256];
-    memset(payload, '\0', 256);
-    int payload_size = (message->payloadlen > 255) ? 255 : message->payloadlen;
-    memcpy(payload, message->payload, payload_size);
-    printf("message %d @ %s: %s\n", message->mid, message->topic, payload);
-
-    // exit on magic word
-    if (strcmp(payload, "exit") == 0) {
-        gm_shutdown();
-    }
-
-    // otherwise just spawn a process
-    // TODO: this should be in a "controller class" module
-    //       it also needs some sort of error handling
-    else {
-        static uint32_t jid = 2;
-        int rv = submit_job(jid++, transfer_to_stdout, payload);
-        if (rv != 0) {
-            fprintf(stderr, "couldn't start job: %s\n", strerror(rv));
-        }
-    }
+    // punt to controller
+    gm_route_message(message);
 }
 
 // TODO: move this somewhere else

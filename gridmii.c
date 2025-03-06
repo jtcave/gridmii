@@ -16,16 +16,6 @@
 
 #include "gridmii.h"
 
-void transfer_to_stdout(struct job *jobspec, int source_fd, char *buffer, size_t readsize) {
-    if (source_fd == jobspec->job_stderr) {
-        // stderr to stderr
-        write(STDERR_FILENO, buffer, readsize);
-    }
-    else {
-        write(STDOUT_FILENO, buffer, readsize);
-    }
-}
-
 void exit_cleanup(void) {
     // clean up job scripts
     // TODO: this is a horrendous hack

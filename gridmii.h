@@ -88,5 +88,8 @@ void gm_do_events(void);
 
 /// declarations - message response controller
 
+// incoming message router
+void gm_route_message(const struct mosquitto_message *message);
+
 // job write callback that just writes to stdout
 void transfer_to_stdout(struct job *jobspec, int source_fd, char *buffer, size_t readsize);
