@@ -1,0 +1,6 @@
+# output files
+*.o
+gridmii
+
+# vscode junk
+vscode/*
