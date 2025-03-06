@@ -164,7 +164,7 @@ void poll_job_output(struct job *jobspec) {
                 jobspec->on_write(jobspec, polls[i].fd, buffer, read_count);
                 if (read_count == 0) {
                     // EOF
-                    printf("\nclosing fd %d\n", polls[i].fd);
+                    //printf("\nclosing fd %d\n", polls[i].fd);
                     close_job_fd(jobspec, polls[i].fd);
                 }
             }
@@ -180,7 +180,7 @@ int poll_job_process_life(struct job *jobspec) {
         pid_t pid = waitpid(jobspec->job_pid, &stat, WNOHANG);
         if (pid != 0) {
             // job's done
-            printf("pid %d (%d) is gone\n", pid, jobspec->job_pid);
+            //printf("pid %d (%d) is gone\n", pid, jobspec->job_pid);
             jobspec->running = false;
             jobspec->exit_stat = stat;
         }

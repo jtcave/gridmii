@@ -147,15 +147,21 @@ void gm_process_mqtt(short revents) {
 // callbacks
 
 void has_connected(struct mosquitto *mosq, void *obj, int rc) {
-    printf("has_connected(%p, %p, %d)\n", mosq, obj, rc);
+    if (rc != MOSQ_ERR_SUCCESS) {
+        printf("has_connected(%p, %p, %d)\n", mosq, obj, rc);
+    }
+    else {
+        puts("Connected to MQTT");
+    }
 }
 
 void has_published(struct mosquitto *mosq, void *obj, int mid) {
-    printf("has_published(%p, %p, %d)\n", mosq, obj, mid);
+    // printf("has_published(%p, %p, %d)\n", mosq, obj, mid);
 }
 
 void has_subscribed(struct mosquitto *mosq, void *obj, int mid, int qos_count, const int *granted_qos) {
-    printf("has_subscribed(%p, %p, %d, %d, %p)\n", mosq, obj, mid, qos_count, granted_qos);
+    //printf("has_subscribed(%p, %p, %d, %d, %p)\n", mosq, obj, mid, qos_count, granted_qos);
+    printf("Subscribed, mid = %d\n", mid);
 }
 
 void has_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *message) {
