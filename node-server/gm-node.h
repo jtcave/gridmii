@@ -1,31 +1,13 @@
-// gridmii.h - global declarations
+// gm-node.h - global declarations for gridmii node server
 // TODO: consistent prefix and naming for the global interfaces
 
 #include <sys/types.h>
 #include <mosquitto.h>
 
-/// configuration ///
+#ifndef _GM_NODE_H
+#define _GM_NODE_H
 
-// MQTT broker host name
-#define GRID_HOST "iris.local"
-// MQTT broker port
-#define GRID_PORT 1883
-
-// buffer size for subprocess stdout/stderr reads
-#define BUFFER_SIZE 64
-
-// used as a millisecond delay value in poll(), etc.
-#define DELAY_MS 100
-
-// shell used to run job scripts
-#define SHELL_PATH "/bin/sh"
-
-// max number of concurrent jobs
-#define MAX_JOBS 1
-
-// temp file prefix
-#define TEMP_PREFIX "/tmp/gridmii-"
-#define TEMP_PATTERN TEMP_PREFIX "XXXXXX"
+#include "gm-node-config.h"
 
 /// declarations - mqtt ///
 
@@ -90,3 +72,5 @@ void gm_do_events(void);
 
 // incoming message router
 void gm_route_message(const struct mosquitto_message *message);
+
+#endif
