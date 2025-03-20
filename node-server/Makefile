@@ -1,14 +1,21 @@
 CFLAGS=-Wall -g
 LDLIBS=-lmosquitto
 
+# pull in Homebrew on macOS
+OSNAME := $(shell uname -s)
+ifeq "$(OSNAME)" "Darwin"
+	CFLAGS +=  -I/opt/homebrew/include -L/opt/homebrew/lib
+endif
+
 HEADERS = gm-node.h gm-node-config.h
 MODULES = mqtt.c jobs.c eventloop.c controller.c gm-node.c
 
 all: gm-node
 
 gm-node: $(HEADERS) $(MODULES)
+	$(CC) $(CFLAGS) -o gm-node  $(MODULES) $(LDLIBS)
 
 clean:
-	rm -f gm-node *.o
+	rm -rf gm-node *.o *.dSYM
 
 .PHONY: clean

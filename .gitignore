@@ -1,5 +1,6 @@
 # output files
 *.o
+*.dSYM
 gm-node
 
 # vscode junk
