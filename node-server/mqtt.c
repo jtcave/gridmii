@@ -26,10 +26,9 @@ void has_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messa
 void has_subscribed(struct mosquitto *mosq, void *obj, int mid, int qos_count, const int *granted_qos);
 
 // get the client name for mqtt (currently the system hostname)
-// TODO: truncate to MOSQ_MQTT_ID_MAX_LENGTH
+// TODO: stress test
 const char *node_name() {
-    // host names are up to 255 characters on macOS/NetBSD, 64 on Linux
-    static char nodebuffer[256] = {0};
+    static char nodebuffer[MOSQ_MQTT_ID_MAX_LENGTH + 1] = {0};
     if (*nodebuffer == '\0') {
         // fill nodebuffer from uname()
         struct utsname the_uname;
@@ -37,7 +36,7 @@ const char *node_name() {
         if (rv != 0) {
             err(1, "could not get system uname");
         }
-        strncpy(nodebuffer, the_uname.nodename, 255);
+        strncpy(nodebuffer, the_uname.nodename, MOSQ_MQTT_ID_MAX_LENGTH);
     }
     return nodebuffer;
 }
@@ -57,11 +56,14 @@ void assert_mqtt_initialized(void) {
 struct mosquitto *gm_init_mqtt(void) {
     int rv;
 
+    // get the MQTT client ID
+    const char *client_name = node_name();
+
     // set up library and struct
     if (mosquitto_lib_init() != MOSQ_ERR_SUCCESS) {
         errx(1, "could not initialize mosquitto library");
     }
-    gm_mosq = mosquitto_new("gridmii-demo", false, NULL);
+    gm_mosq = mosquitto_new(client_name, false, NULL);
     if (gm_mosq == NULL) {
         err(1, "could not create mosquitto client object");
     }
@@ -74,8 +76,7 @@ struct mosquitto *gm_init_mqtt(void) {
 
     
     // declare last will of client
-    // TODO: what level of QoS for the will? What topic?
-    const char *client_name = node_name();
+    // TODO: currently it just writes the client name to the `disconnect` topic - is that ideal? 
     rv = mosquitto_will_set(gm_mosq, "disconnect", strlen(client_name), client_name, 0, false);
     if (rv != MOSQ_ERR_SUCCESS) {
         errx(1, "could not set last will, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
