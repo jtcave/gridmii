@@ -35,7 +35,6 @@ int main(int argc, char *const *argv) {
 
     init_job_table();
 
-    printf("starting mqtt...");
     gm_init_mqtt();
     gm_connect_mqtt();
 

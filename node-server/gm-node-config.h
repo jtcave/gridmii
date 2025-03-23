@@ -6,9 +6,9 @@
 /// configuration ///
 
 // MQTT broker host name
-#define GRID_HOST "localhost"
+#define GRID_HOST_DEFAULT "localhost"
 // MQTT broker port
-#define GRID_PORT 1883
+#define GRID_PORT_DEFAULT 1883
 
 // buffer size for subprocess stdout/stderr reads
 #define BUFFER_SIZE 64

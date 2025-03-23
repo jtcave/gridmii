@@ -78,7 +78,7 @@ struct mosquitto *gm_init_mqtt(void) {
     const char *client_name = node_name();
     rv = mosquitto_will_set(gm_mosq, "disconnect", strlen(client_name), client_name, 0, false);
     if (rv != MOSQ_ERR_SUCCESS) {
-        errx(1, "could not set last will, mosq_err_t = %d", rv);
+        errx(1, "could not set last will, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
     }
 
     // mosquitto_username_pw_set(gm_mosq, "username", "password");
@@ -86,16 +86,29 @@ struct mosquitto *gm_init_mqtt(void) {
     return gm_mosq;
 }
 
+void get_broker(char **host, int *port) {
+    // TODO: getenv the port
+    char *env_host = getenv("GRID_HOST");
+    *host = (env_host ? env_host : GRID_HOST_DEFAULT);
+    
+    char *env_port = getenv("GRID_PORT");
+    *port = (env_port ? atoi(env_port) : GRID_PORT_DEFAULT);
+}
+
 void gm_connect_mqtt() {
     assert_mqtt_initialized();
 
     // connect
-    int rv = mosquitto_connect(gm_mosq, GRID_HOST, GRID_PORT, 60);
+    char *host;
+    int port;
+    get_broker(&host, &port);
+    printf("Connecting to broker %s:%d\n", host, port);
+    int rv = mosquitto_connect(gm_mosq, host, port, 60);
     if (rv == MOSQ_ERR_ERRNO) {
         err(1, "could not connect to broker");
     }
     else if (rv != MOSQ_ERR_SUCCESS) {
-        errx(1, "could not connect to broker, mosq_err_t = %d", rv);
+        errx(1, "could not connect to broker, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
     }
 
     // subscribe to topics
@@ -103,7 +116,7 @@ void gm_connect_mqtt() {
 
     rv = mosquitto_subscribe(gm_mosq, NULL, "test/gridmii", 2);
     if (rv != MOSQ_ERR_SUCCESS) {
-        errx(1, "could not subscribe, mosq_err_t = %d", rv);
+        errx(1, "could not subscribe, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
     }
 }
 
@@ -122,7 +135,7 @@ void gm_process_mqtt(short revents) {
             err(1, "could not perform read ops");
         }
         else if (rv != MOSQ_ERR_SUCCESS) {
-            errx(1, "could not perform read ops, mosq_err_t = %d", rv);
+            errx(1, "could not perform read ops, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
         }
     }
     if (revents & POLLOUT) {
@@ -131,7 +144,7 @@ void gm_process_mqtt(short revents) {
             err(1, "could not perform read ops");
         }
         else if (rv != MOSQ_ERR_SUCCESS) {
-            errx(1, "could not perform read ops, mosq_err_t = %d", rv);
+            errx(1, "could not perform read ops, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
         }
     }
 
@@ -140,7 +153,7 @@ void gm_process_mqtt(short revents) {
         err(1, "could not perform read ops");
     }
     else if (rv != MOSQ_ERR_SUCCESS) {
-        errx(1, "could not perform read ops, mosq_err_t = %d", rv);
+        errx(1, "could not perform read ops, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
     }
 }
 
@@ -174,7 +187,7 @@ void has_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messa
 void gm_shutdown() {
     int rv = mosquitto_disconnect(gm_mosq);
     if (rv != MOSQ_ERR_SUCCESS) {
-        errx(1, "could not disconnect from broker, mosq_err_t = %dß", rv);
+        errx(1, "could not disconnect from broker, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
     }
 
     mosquitto_destroy(gm_mosq);
