@@ -17,11 +17,13 @@ void transfer_to_stdout(struct job *jobspec, int source_fd, char *buffer, size_t
 }
 
 void on_stdout_mqtt(struct job *jobspec, int source_fd, char *buffer, size_t readsize) {
-    // TODO: MQTT topic should contain job id and output channel
-    //       for example: `job/42/stdout`
     if (readsize > 0) {
-        const char *topic = (source_fd == jobspec->job_stderr) ? "stderr" : "stdout";
-        mosquitto_publish(gm_mosq, NULL, topic, readsize, buffer, 0, false);
+        // figure out the appropriate topic
+        char topic_buf[512];
+        const char *topic_leaf = (source_fd == jobspec->job_stderr) ? "stderr" : "stdout";
+        snprintf(topic_buf, sizeof(topic_buf), "job/%d/%s", jobspec->job_id, topic_leaf);
+        // publish the contents of the buffer to the topic
+        mosquitto_publish(gm_mosq, NULL, topic_buf, readsize, buffer, 0, false);
     }
     
 }
