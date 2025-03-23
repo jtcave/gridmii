@@ -40,8 +40,7 @@ void gm_route_message(const struct mosquitto_message *message) {
     }
 
     // otherwise just spawn a process
-    // TODO: this should be in a "controller class" module
-    //       it also needs some sort of error handling that goes to MQTT
+    // TODO: this needs some sort of error handling that goes to MQTT
     else {
         static uint32_t jid = 2;
         int rv = submit_job(jid++, on_stdout_mqtt, payload);
