@@ -17,9 +17,13 @@
 struct mosquitto *gm_mosq = NULL;
 
 const char *node_name(void);
+void subscribe_topics(void);
+
 bool mqtt_initialized(void);
 void assert_mqtt_initialized(void);
 
+
+// TODO: a disconnection callback that reconnects and puts all the subscriptions back
 void has_connected(struct mosquitto *mosq, void *obj, int rc);
 void has_published(struct mosquitto *mosq, void *obj, int mid);
 void has_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *message);
@@ -59,11 +63,16 @@ struct mosquitto *gm_init_mqtt(void) {
     // get the MQTT client ID
     const char *client_name = node_name();
 
-    // set up library and struct
+    // set up library
     if (mosquitto_lib_init() != MOSQ_ERR_SUCCESS) {
         errx(1, "could not initialize mosquitto library");
     }
-    gm_mosq = mosquitto_new(client_name, false, NULL);
+    // set up mosquitto struct
+    // We want to clear messages and subscriptions on disconnect, because we
+    // don't want a torrent of jobs coming in from users who submitted them
+    // without knowing the node was down. We also want to start with a clean
+    // slate with subscriptions. Hence, set clean_session.
+    gm_mosq = mosquitto_new(client_name, true, NULL);
     if (gm_mosq == NULL) {
         err(1, "could not create mosquitto client object");
     }
@@ -112,14 +121,19 @@ void gm_connect_mqtt() {
         errx(1, "could not connect to broker, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
     }
 
-    // subscribe to topics
-    // TODO: topic hierarchy
+    subscribe_topics();
+}
 
-    rv = mosquitto_subscribe(gm_mosq, NULL, "test/gridmii", 2);
+void subscribe_topics() {
+    // buffer for topic string
+    char topic_buf[512];
+    snprintf(topic_buf, sizeof(topic_buf), "%s/submit/+", node_name());
+    int rv = mosquitto_subscribe(gm_mosq, NULL, topic_buf, 2);
     if (rv != MOSQ_ERR_SUCCESS) {
         errx(1, "could not subscribe, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
     }
 }
+
 
 void gm_process_mqtt(short revents) {
     // process events for mqtt socket
