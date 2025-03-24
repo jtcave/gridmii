@@ -68,6 +68,12 @@ int spawn_job(struct job *jobspec, uint32_t job_id, write_callback on_write, cha
     posix_spawnattr_t attr;
     posix_spawnattr_init(&attr);
 
+    // Put process in a new process group
+    short spawn_flags = 0;
+    posix_spawnattr_getflags(&attr, &spawn_flags);
+    spawn_flags |= POSIX_SPAWN_SETPGROUP;
+    posix_spawnattr_setflags(&attr, spawn_flags);
+
     // create pipes for child stdio
     // TODO: handle errors more gracefully
     int stdin_pipe[2], stdout_pipe[2], stderr_pipe[2];
