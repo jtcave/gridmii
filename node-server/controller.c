@@ -23,7 +23,7 @@ void on_stdout_mqtt(struct job *jobspec, int source_fd, char *buffer, size_t rea
         const char *topic_leaf = (source_fd == jobspec->job_stderr) ? "stderr" : "stdout";
         snprintf(topic_buf, sizeof(topic_buf), "job/%d/%s", jobspec->job_id, topic_leaf);
         // publish the contents of the buffer to the topic
-        mosquitto_publish(gm_mosq, NULL, topic_buf, readsize, buffer, 0, false);
+        mosquitto_publish(gm_mosq, NULL, topic_buf, readsize, buffer, 2, false);
     }
 }
 
