@@ -25,7 +25,12 @@ void on_stdout_mqtt(struct job *jobspec, int source_fd, char *buffer, size_t rea
         // publish the contents of the buffer to the topic
         mosquitto_publish(gm_mosq, NULL, topic_buf, readsize, buffer, 0, false);
     }
-    
+}
+
+void publish_job_response(int jid, const char *verb, const char *payload) {
+    char topic_buf[512];
+    snprintf(topic_buf, sizeof(topic_buf), "job/%d/%s", jid, verb);
+    mosquitto_publish(gm_mosq, NULL, topic_buf, strlen(payload), payload, 2, true);
 }
 
 void gm_route_message(const struct mosquitto_message *message) {
@@ -41,13 +46,17 @@ void gm_route_message(const struct mosquitto_message *message) {
         gm_shutdown();
     }
 
-    // otherwise just spawn a process
-    // TODO: this needs some sort of error handling that goes to MQTT
+    // otherwise just spawn a process and publish the response message
     else {
-        static uint32_t jid = 2;
-        int rv = submit_job(jid++, on_stdout_mqtt, payload);
-        if (rv != 0) {
+        // TODO: extract jid from topic instead of static counter
+        static uint32_t jid = 0;
+        int rv = submit_job(++jid, on_stdout_mqtt, payload);
+        if (rv == 0) {
+            publish_job_response(jid, "startup", "");
+        }
+        else {
             fprintf(stderr, "couldn't start job: %s\n", strerror(rv));
+            publish_job_response(jid, "reject", strerror(rv));
         }
     }
 }
