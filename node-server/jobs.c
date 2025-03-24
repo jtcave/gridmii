@@ -179,10 +179,14 @@ int poll_job_process_life(struct job *jobspec) {
     if (jobspec->running) {
         pid_t pid = waitpid(jobspec->job_pid, &stat, WNOHANG);
         if (pid != 0) {
-            // job's done
-            //printf("pid %d (%d) is gone\n", pid, jobspec->job_pid);
+            // mark job as done
             jobspec->running = false;
             jobspec->exit_stat = stat;
+            // report to broker
+            // TODO: should this be encoded for platform independence?
+            char payload[16];
+            snprintf(payload, sizeof(payload), "%d", stat);
+            gm_publish_job_status(jobspec->job_id, "stopped", payload);
         }
     }
     return stat;

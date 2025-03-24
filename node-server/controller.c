@@ -27,7 +27,7 @@ void on_stdout_mqtt(struct job *jobspec, int source_fd, char *buffer, size_t rea
     }
 }
 
-void publish_job_response(int jid, const char *verb, const char *payload) {
+void gm_publish_job_status(int jid, const char *verb, const char *payload) {
     char topic_buf[512];
     snprintf(topic_buf, sizeof(topic_buf), "job/%d/%s", jid, verb);
     mosquitto_publish(gm_mosq, NULL, topic_buf, strlen(payload), payload, 2, true);
@@ -52,11 +52,11 @@ void gm_route_message(const struct mosquitto_message *message) {
         static uint32_t jid = 0;
         int rv = submit_job(++jid, on_stdout_mqtt, payload);
         if (rv == 0) {
-            publish_job_response(jid, "startup", "");
+            gm_publish_job_status(jid, "startup", "");
         }
         else {
             fprintf(stderr, "couldn't start job: %s\n", strerror(rv));
-            publish_job_response(jid, "reject", strerror(rv));
+            gm_publish_job_status(jid, "reject", strerror(rv));
         }
     }
 }

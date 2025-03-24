@@ -73,4 +73,7 @@ void gm_do_events(void);
 // incoming message router
 void gm_route_message(const struct mosquitto_message *message);
 
+// publish a job status update message for the given job
+void gm_publish_job_status(int jid, const char *verb, const char *payload);
+
 #endif
