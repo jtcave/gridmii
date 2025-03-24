@@ -33,24 +33,62 @@ void gm_publish_job_status(int jid, const char *verb, const char *payload) {
     mosquitto_publish(gm_mosq, NULL, topic_buf, strlen(payload), payload, 2, true);
 }
 
+// topic router
+
+/* Adding a new topic requires:
+ *  - extending the topic_patterns array
+ *  - making a new entry in the enum for the topic
+ *  - adding dispatch and handling code to gm_route_message()
+ *  - subscribing to the topic in mqtt.c
+ * 
+ * Since we don't expect to handle that many topics, this should be an
+ * acceptable level of nonsense.
+ */
+
+#define N_TOPIC_HANDLERS 2
+#define MAX_TOPIC_TEMPLATE 256
+static char topic_patterns[N_TOPIC_HANDLERS][MAX_TOPIC_TEMPLATE];
+static bool topic_patterns_initialized = false;
+enum request_topics {
+    TOPIC_SUBMIT_JOB = 0,
+    TOPIC_EXIT = 1,
+};
+
+// Prepare topic patterns
+void init_topic_templates() {
+    if (topic_patterns_initialized) return;
+
+    const char *node_name = gm_node_name();
+    snprintf(topic_patterns[TOPIC_SUBMIT_JOB], MAX_TOPIC_TEMPLATE,
+        "%s/submit/%%ud", node_name);
+    snprintf(topic_patterns[TOPIC_EXIT], MAX_TOPIC_TEMPLATE,
+        "%s/exit", node_name);
+    topic_patterns_initialized = true;
+}
+
 void gm_route_message(const struct mosquitto_message *message) {
-    // TODO: read topic and dispatch the appropriate function
-    static char payload[256];
-    memset(payload, '\0', 256);
+    // set up patterns
+    init_topic_templates();
+
+    // slurp payload out of message
+    char payload[256] = {0};
+    memset(payload, 0, 256);
     int payload_size = (message->payloadlen > 255) ? 255 : message->payloadlen;
     memcpy(payload, message->payload, payload_size);
+    
     printf("message %d @ %s: %s\n", message->mid, message->topic, payload);
 
-    // exit on magic word
-    if (strcmp(payload, "exit") == 0) {
-        gm_shutdown();
-    }
+    // start matching topic patterns:
 
-    // otherwise just spawn a process and publish the response message
-    else {
-        // TODO: extract jid from topic instead of static counter
-        static uint32_t jid = 0;
-        int rv = submit_job(++jid, on_stdout_mqtt, payload);
+    // submit job endpoint
+    uint32_t jid;
+    if (sscanf(message->topic, topic_patterns[TOPIC_SUBMIT_JOB], &jid) > 0) {
+        if (jid == 0) {
+            // sender doesn't care what the JID is, so make one up
+            static uint32_t jid_counter = 777;
+            jid = jid_counter++;
+        }
+        int rv = submit_job(jid, on_stdout_mqtt, payload);
         if (rv == 0) {
             gm_publish_job_status(jid, "startup", "");
         }
@@ -58,5 +96,15 @@ void gm_route_message(const struct mosquitto_message *message) {
             fprintf(stderr, "couldn't start job: %s\n", strerror(rv));
             gm_publish_job_status(jid, "reject", strerror(rv));
         }
+    }
+
+    // exit endpoint
+    else if (strcmp(message->topic, topic_patterns[TOPIC_EXIT]) == 0) {
+        gm_shutdown();
+    }
+    
+    // unrecognized topic, complain
+    else {
+        fprintf(stderr, "don't understand topic '%s'", message->topic);
     }
 }

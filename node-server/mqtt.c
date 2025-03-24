@@ -16,7 +16,6 @@
 // global mosquitto object
 struct mosquitto *gm_mosq = NULL;
 
-const char *node_name(void);
 void subscribe_topics(void);
 
 bool mqtt_initialized(void);
@@ -28,22 +27,6 @@ void has_connected(struct mosquitto *mosq, void *obj, int rc);
 void has_published(struct mosquitto *mosq, void *obj, int mid);
 void has_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *message);
 void has_subscribed(struct mosquitto *mosq, void *obj, int mid, int qos_count, const int *granted_qos);
-
-// get the client name for mqtt (currently the system hostname)
-// TODO: stress test
-const char *node_name() {
-    static char nodebuffer[MOSQ_MQTT_ID_MAX_LENGTH + 1] = {0};
-    if (*nodebuffer == '\0') {
-        // fill nodebuffer from uname()
-        struct utsname the_uname;
-        int rv = uname(&the_uname);
-        if (rv != 0) {
-            err(1, "could not get system uname");
-        }
-        strncpy(nodebuffer, the_uname.nodename, MOSQ_MQTT_ID_MAX_LENGTH);
-    }
-    return nodebuffer;
-}
 
 // returhs false if MQTT hasn't been initialized - that is, if `gm_mosq` is still NULL;
 bool mqtt_initialized() {
@@ -61,7 +44,7 @@ struct mosquitto *gm_init_mqtt(void) {
     int rv;
 
     // get the MQTT client ID
-    const char *client_name = node_name();
+    const char *client_name = gm_node_name();
 
     // set up library
     if (mosquitto_lib_init() != MOSQ_ERR_SUCCESS) {
@@ -127,8 +110,18 @@ void gm_connect_mqtt() {
 void subscribe_topics() {
     // buffer for topic string
     char topic_buf[512];
-    snprintf(topic_buf, sizeof(topic_buf), "%s/submit/+", node_name());
-    int rv = mosquitto_subscribe(gm_mosq, NULL, topic_buf, 2);
+
+    // subscribe to job submit endpoint
+    int rv;
+    snprintf(topic_buf, sizeof(topic_buf), "%s/submit/+", gm_node_name());
+    rv = mosquitto_subscribe(gm_mosq, NULL, topic_buf, 2);
+    if (rv != MOSQ_ERR_SUCCESS) {
+        errx(1, "could not subscribe, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
+    }
+
+    // subscribe to exit endpoint
+    snprintf(topic_buf, sizeof(topic_buf), "%s/exit", gm_node_name());
+    rv = mosquitto_subscribe(gm_mosq, NULL, topic_buf, 2);
     if (rv != MOSQ_ERR_SUCCESS) {
         errx(1, "could not subscribe, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
     }

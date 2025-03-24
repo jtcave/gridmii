@@ -10,6 +10,7 @@
 #include <poll.h>
 #include <string.h>
 #include <fcntl.h>
+#include <sys/utsname.h>
 
 #include <mosquitto.h>
 
@@ -20,6 +21,22 @@
 #define __USE_POSIX
 #endif
 #include <signal.h>
+
+// get the client name for mqtt (currently the system hostname)
+// TODO: stress test
+const char *gm_node_name() {
+    static char nodebuffer[MOSQ_MQTT_ID_MAX_LENGTH + 1] = {0};
+    if (*nodebuffer == '\0') {
+        // fill nodebuffer from uname()
+        struct utsname the_uname;
+        int rv = uname(&the_uname);
+        if (rv != 0) {
+            err(1, "could not get system uname");
+        }
+        strncpy(nodebuffer, the_uname.nodename, MOSQ_MQTT_ID_MAX_LENGTH);
+    }
+    return nodebuffer;
+}
 
 void exit_cleanup(void) {
     // clean up job scripts

@@ -9,6 +9,11 @@
 
 #include "gm-node-config.h"
 
+/// declarations - misc system ///
+
+// get the client name for MQTT
+const char *gm_node_name(void);
+
 /// declarations - mqtt ///
 
 // global mosquitto object
