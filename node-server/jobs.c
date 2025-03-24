@@ -68,9 +68,9 @@ int spawn_job(struct job *jobspec, uint32_t job_id, write_callback on_write, cha
     posix_spawnattr_t attr;
     posix_spawnattr_init(&attr);
 
-    // create pipes for child stdout and stderr
+    // create pipes for child stdio
     // TODO: handle errors more gracefully
-    int stdout_pipe[2], stderr_pipe[2];
+    int stdin_pipe[2], stdout_pipe[2], stderr_pipe[2];
     if (pipe(stdout_pipe) != 0) {
         err(1, "could not create pipe for stdout");
     }
@@ -82,6 +82,15 @@ int spawn_job(struct job *jobspec, uint32_t job_id, write_callback on_write, cha
     }
     jobspec->job_stderr = stderr_pipe[0];
     posix_spawn_file_actions_adddup2(&file_actions, stderr_pipe[1], STDERR_FILENO);
+
+    if (pipe(stdin_pipe) != 0) {
+        err(1, "could not create pipe for stdin");
+    }
+    posix_spawn_file_actions_adddup2(&file_actions, stdin_pipe[0], STDIN_FILENO);
+    
+    // TODO: hook the write side of stdin pipe to the jobspec/event loop
+    // for now we just widow the pipe so the subprocess sees EOF
+    close(stdin_pipe[1]);
 
     // TODO: build an environment for the subprocess instead of just slurping up the host's
     //       (this is an awful dirty hack for development purposes)
@@ -100,9 +109,11 @@ int spawn_job(struct job *jobspec, uint32_t job_id, write_callback on_write, cha
         jobspec->running = true;
     }
 
-    // close the write side of the pipes in this process, so the read sides will be orphaned when the subprocess exits
+    // close the unused sides of the pipes in this parent process,
+    // so the pipes will deliver EOF when the subprocess exits
     close(stdout_pipe[1]);
     close(stderr_pipe[1]);
+    close(stdin_pipe[0]);
 
     // clean up file actions/attr
     posix_spawnattr_destroy(&attr);
