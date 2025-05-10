@@ -11,16 +11,14 @@
 
 /// declarations - misc system ///
 
-// get the client name for MQTT
-const char *gm_node_name(void);
-
 // configuration table struct
 struct gm_config_data {
-    char *grid_host;
+    const char *grid_host;
     int grid_port;
     bool use_tls;
-    char *grid_username;
-    char *grid_password;
+    const char *grid_username;
+    const char *grid_password;
+    const char *node_name;
 };
 
 // global configuration table

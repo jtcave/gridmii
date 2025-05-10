@@ -58,7 +58,7 @@ enum request_topics {
 void init_topic_templates() {
     if (topic_patterns_initialized) return;
 
-    const char *node_name = gm_node_name();
+    const char *node_name = gm_config.node_name;
     snprintf(topic_patterns[TOPIC_SUBMIT_JOB], MAX_TOPIC_TEMPLATE,
         "%s/submit/%%ud", node_name);
     snprintf(topic_patterns[TOPIC_EXIT], MAX_TOPIC_TEMPLATE,

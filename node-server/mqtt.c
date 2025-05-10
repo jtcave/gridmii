@@ -44,7 +44,7 @@ struct mosquitto *gm_init_mqtt(void) {
     int rv;
 
     // get the MQTT client ID
-    const char *client_name = gm_node_name();
+    const char *client_name = gm_config.node_name;
 
     // set up library
     if (mosquitto_lib_init() != MOSQ_ERR_SUCCESS) {
@@ -93,7 +93,7 @@ void gm_connect_mqtt() {
     assert_mqtt_initialized();
 
     // connect
-    char *host = gm_config.grid_host;
+    const char *host = gm_config.grid_host;
     int port = gm_config.grid_port;
     printf("Connecting to broker %s:%d\n", host, port);
     int rv = mosquitto_connect(gm_mosq, host, port, 60);
@@ -113,14 +113,14 @@ void subscribe_topics() {
 
     // subscribe to job submit endpoint
     int rv;
-    snprintf(topic_buf, sizeof(topic_buf), "%s/submit/+", gm_node_name());
+    snprintf(topic_buf, sizeof(topic_buf), "%s/submit/+", gm_config.node_name);
     rv = mosquitto_subscribe(gm_mosq, NULL, topic_buf, 2);
     if (rv != MOSQ_ERR_SUCCESS) {
         errx(1, "could not subscribe, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
     }
 
     // subscribe to exit endpoint
-    snprintf(topic_buf, sizeof(topic_buf), "%s/exit", gm_node_name());
+    snprintf(topic_buf, sizeof(topic_buf), "%s/exit", gm_config.node_name);
     rv = mosquitto_subscribe(gm_mosq, NULL, topic_buf, 2);
     if (rv != MOSQ_ERR_SUCCESS) {
         errx(1, "could not subscribe, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));

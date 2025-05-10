@@ -25,6 +25,21 @@
 // global configuration table
 struct gm_config_data gm_config;
 
+// get the default client name for mqtt (currently the system hostname)
+const char *default_node_name() {
+    static char nodebuffer[MOSQ_MQTT_ID_MAX_LENGTH + 1] = {0};
+    if (*nodebuffer == '\0') {
+        // fill nodebuffer from uname()
+        struct utsname the_uname;
+        int rv = uname(&the_uname);
+        if (rv != 0) {
+            err(1, "could not get system uname");
+        }
+        strncpy(nodebuffer, the_uname.nodename, MOSQ_MQTT_ID_MAX_LENGTH);
+    }
+    return nodebuffer;
+}
+
 // populate gm_config according to the environment
 void init_config() {
     char *env_host = getenv("GRID_HOST");
@@ -42,31 +57,18 @@ void init_config() {
     char *env_grid_password = getenv("GRID_PASSWORD");
     gm_config.grid_password = env_grid_password;
 
+    char *env_node_name = getenv("GRID_NODE_NAME");
+    gm_config.node_name = (env_node_name ? env_node_name : default_node_name());
+
     // dump the config for debugging
-    // TODO: don't
     puts("Your configuration:");
     printf("GRID_HOST=%s\n", gm_config.grid_host);
     printf("GRID_PORT=%d\n", gm_config.grid_port);
     printf("GRID_TLS=%s\n", gm_config.use_tls ? "yes" : "no");
     printf("GRID_USERNAME=%s\n", gm_config.grid_username ? gm_config.grid_username : "(not set)");
-    printf("GRID_PASSWORD=%s\n", gm_config.grid_password ? gm_config.grid_password : "(not set)");
+    printf("GRID_PASSWORD=%s\n", gm_config.grid_password ? "(set)" : "(not set)");
+    printf("NODE_NAME=%s\n", gm_config.node_name);
     puts("");
-}
-
-// get the client name for mqtt (currently the system hostname)
-// TODO: stress test
-const char *gm_node_name() {
-    static char nodebuffer[MOSQ_MQTT_ID_MAX_LENGTH + 1] = {0};
-    if (*nodebuffer == '\0') {
-        // fill nodebuffer from uname()
-        struct utsname the_uname;
-        int rv = uname(&the_uname);
-        if (rv != 0) {
-            err(1, "could not get system uname");
-        }
-        strncpy(nodebuffer, the_uname.nodename, MOSQ_MQTT_ID_MAX_LENGTH);
-    }
-    return nodebuffer;
 }
 
 void exit_cleanup(void) {
