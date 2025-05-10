@@ -6,3 +6,6 @@ gm-node
 # vscode/jetbrains junk
 .vscode/*
 .idea/*
+
+# these guys have plaintext passwords in them
+*.conf

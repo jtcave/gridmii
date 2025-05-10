@@ -1,0 +1,9 @@
+## Don't run this file directly. It just sets environment variables.
+
+export GRID_HOST=localhost
+export GRID_PORT=1883
+# export GRID_TLS=y     # if you don't want TLS, don't export this
+
+## Your username and password will be assigned to you by GridMii staff.
+# export GRID_USERNAME=fihp
+# export GRID_PASSWORD=hunter2
