@@ -7,5 +7,6 @@ gm-node
 .vscode/*
 .idea/*
 
-# these guys have plaintext passwords in them
+# these guys have secrets/site config in them
 *.conf
+*.crt

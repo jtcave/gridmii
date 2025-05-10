@@ -74,6 +74,14 @@ struct mosquitto *gm_init_mqtt(void) {
         errx(1, "could not set last will, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
     }
 
+    // TODO: let user specify TLS cert name
+    if (gm_config.use_tls) {
+        rv = mosquitto_tls_set(gm_mosq, "gridmii.crt", NULL, NULL, NULL, NULL);
+        if (rv != MOSQ_ERR_SUCCESS) {
+            errx(1, "could not set up TLS, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
+        }
+    }
+
     if (gm_config.grid_username != NULL && gm_config.grid_password != NULL) {
         mosquitto_username_pw_set(gm_mosq, gm_config.grid_username, gm_config.grid_password);
     }
