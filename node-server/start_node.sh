@@ -14,7 +14,7 @@ then
     echo 'Try running `make` or `gmake`.'
     exit 1
 else
-    . $CONFIG_FILE
+    . ./$CONFIG_FILE
     # demand a cert only if TLS is set 
     if [ ! -r "$CERT_FILE" -a -n "$GRID_TLS" ]
     then
