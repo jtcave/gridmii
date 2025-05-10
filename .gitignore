@@ -3,5 +3,6 @@
 *.dSYM
 gm-node
 
-# vscode junk
+# vscode/jetbrains junk
 .vscode/*
+.idea/*

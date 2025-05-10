@@ -1,0 +1,11 @@
+# jetbrains junk
+.idea/*
+
+# leave the venv stuff out
+bin/*
+include/*
+lib/*
+pyvenv.cfg
+
+# leave out the config file; it has keys
+config.json
