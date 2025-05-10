@@ -7,6 +7,11 @@ ifeq "$(OSNAME)" "Darwin"
 	CFLAGS +=  -I/opt/homebrew/include -L/opt/homebrew/lib
 endif
 
+# pull in package libs on NetBSD
+ifeq "$(OSNAME)" "NetBSD"
+        CFLAGS +=  -I/usr/pkg/include -L/usr/pkg/lib
+endif
+
 HEADERS = gm-node.h gm-node-config.h
 MODULES = mqtt.c jobs.c eventloop.c controller.c gm-node.c
 
