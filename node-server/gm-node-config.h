@@ -11,7 +11,7 @@
 #define GRID_PORT_DEFAULT 1883
 
 // buffer size for subprocess stdout/stderr reads
-#define BUFFER_SIZE 64
+#define BUFFER_SIZE 256
 
 // used as a millisecond delay value in poll(), etc.
 #define DELAY_MS 100
