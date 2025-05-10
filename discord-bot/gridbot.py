@@ -11,6 +11,9 @@ TOKEN = config['token']
 GUILD = discord.Object(id=config['guild'])
 BROKER = config["mqtt_broker"]
 PORT = config["mqtt_port"]
+MQTT_TLS = config.get("mqtt_tls", False)
+MQTT_USERNAME = config.get("mqtt_username", "")
+MQTT_PASSWORD = config.get("mqtt_password", "")
 TARGET_NODE = config["target_node"]
 
 ## job table ##
@@ -89,8 +92,15 @@ class GridMiiBot(Bot):
 
     async def do_mqtt_task(self):
         # This is the MQTT task.
+        if MQTT_TLS:
+            tls_params = aiomqtt.TLSParameters()
+        else:
+            tls_params = None
+
         await self.wait_until_ready()
-        async with aiomqtt.Client(BROKER, PORT) as mq_client:
+        async with aiomqtt.Client(BROKER, PORT,
+                                  username=MQTT_USERNAME, password=MQTT_PASSWORD,
+                                  tls_params=tls_params) as mq_client:
             self.mq_client = mq_client
             # subscribe to our topics
             # TODO: listen for shutdown messages
