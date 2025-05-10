@@ -22,6 +22,23 @@
 #endif
 #include <signal.h>
 
+// global configuration table
+struct gm_config_data gm_config;
+
+// populate gm_config according to the environment
+void init_config() {
+    char *env_host = getenv("GRID_HOST");
+    gm_config.grid_host = (env_host ? env_host : GRID_HOST_DEFAULT);
+    
+    char *env_port = getenv("GRID_PORT");
+    gm_config.grid_port = (env_port ? atoi(env_port) : GRID_PORT_DEFAULT);
+
+    // TODO: fill these dummies
+    gm_config.use_tls = false;
+    gm_config.grid_username = NULL;
+    gm_config.grid_password = NULL;
+}
+
 // get the client name for mqtt (currently the system hostname)
 // TODO: stress test
 const char *gm_node_name() {
@@ -75,6 +92,7 @@ int main(int argc, char *const *argv) {
     }
 
     // start up the subsystems and do an event loop
+    init_config();
     init_job_table();
     gm_init_mqtt();
     gm_connect_mqtt();

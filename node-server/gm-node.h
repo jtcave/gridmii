@@ -14,6 +14,18 @@
 // get the client name for MQTT
 const char *gm_node_name(void);
 
+// configuration table struct
+struct gm_config_data {
+    char *grid_host;
+    int grid_port;
+    bool use_tls;
+    char *grid_username;
+    char *grid_password;
+};
+
+// global configuration table
+extern struct gm_config_data gm_config;
+
 /// declarations - mqtt ///
 
 // global mosquitto object

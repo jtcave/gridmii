@@ -79,22 +79,12 @@ struct mosquitto *gm_init_mqtt(void) {
     return gm_mosq;
 }
 
-void get_broker(char **host, int *port) {
-    // TODO: getenv the port
-    char *env_host = getenv("GRID_HOST");
-    *host = (env_host ? env_host : GRID_HOST_DEFAULT);
-    
-    char *env_port = getenv("GRID_PORT");
-    *port = (env_port ? atoi(env_port) : GRID_PORT_DEFAULT);
-}
-
 void gm_connect_mqtt() {
     assert_mqtt_initialized();
 
     // connect
-    char *host;
-    int port;
-    get_broker(&host, &port);
+    char *host = gm_config.grid_host;
+    int port = gm_config.grid_port;
     printf("Connecting to broker %s:%d\n", host, port);
     int rv = mosquitto_connect(gm_mosq, host, port, 60);
     if (rv == MOSQ_ERR_ERRNO) {
