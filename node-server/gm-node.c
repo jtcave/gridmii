@@ -33,10 +33,24 @@ void init_config() {
     char *env_port = getenv("GRID_PORT");
     gm_config.grid_port = (env_port ? atoi(env_port) : GRID_PORT_DEFAULT);
 
-    // TODO: fill these dummies
-    gm_config.use_tls = false;
-    gm_config.grid_username = NULL;
-    gm_config.grid_password = NULL;
+    char *env_tls = getenv("GRID_TLS");
+    gm_config.use_tls = (env_tls != NULL);
+
+    char *env_grid_username = getenv("GRID_USERNAME");
+    gm_config.grid_username = env_grid_username;
+
+    char *env_grid_password = getenv("GRID_PASSWORD");
+    gm_config.grid_password = env_grid_password;
+
+    // dump the config for debugging
+    // TODO: don't
+    puts("Your configuration:");
+    printf("GRID_HOST=%s\n", gm_config.grid_host);
+    printf("GRID_PORT=%d\n", gm_config.grid_port);
+    printf("GRID_TLS=%s\n", gm_config.use_tls ? "yes" : "no");
+    printf("GRID_USERNAME=%s\n", gm_config.grid_username ? gm_config.grid_username : "(not set)");
+    printf("GRID_PASSWORD=%s\n", gm_config.grid_password ? gm_config.grid_password : "(not set)");
+    puts("");
 }
 
 // get the client name for mqtt (currently the system hostname)
