@@ -151,11 +151,16 @@ class GridMiiBot(Bot):
 
 bot = GridMiiBot(intents=intents)
 
-@bot.command()
+@bot.command(name="yougood")
 async def ping(ctx: Context):
-    """send pong to the channel"""
-    await ctx.send("pong")
-
+    """Check connectivity to broker"""
+    if bot.mq_client is None:
+        await ctx.reply(":-1: mq_client is None")
+    elif bot.mq_client._disconnected.done():
+        # XXX: don't grovel into internal members like that
+        await ctx.reply(":-1: mq_client._disconnected has come to pass")
+    else:
+        await ctx.reply(":+1:")
 
 @bot.command(name="sh")
 async def start_job(ctx: Context, *command):
