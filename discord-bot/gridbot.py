@@ -101,25 +101,28 @@ class GridMiiBot(Bot):
         await self.wait_until_ready()
 
         logging.info("Starting MQTT task")
+        self.mq_client = aiomqtt.Client(BROKER, PORT,
+                                        username=MQTT_USERNAME, password=MQTT_PASSWORD,
+                                        tls_params=tls_params)
         while True:
-            self.mq_client = aiomqtt.Client(BROKER, PORT,
-                                            username=MQTT_USERNAME, password=MQTT_PASSWORD,
-                                            tls_params=tls_params)
             try:
                 async with self.mq_client:
-                    logging.info("Connected to MQTT broker")
+                    logging.info("Connected to MQTT broker, now subscribing")
                     # subscribe to our topics
                     # TODO: listen for shutdown messages
                     for topic in ("general", "job/#"):
                         await self.mq_client.subscribe(topic)
                     # handle messages
+                    logging.info("MQTT ready")
                     async for msg in self.mq_client.messages:
                         await self.on_mqtt(msg)
-                self.mq_client = None
             except aiomqtt.MqttError:
                 reconnect_delay = 3
                 logging.exception(f"Lost connection to broker. Retrying in {reconnect_delay} seconds")
                 await asyncio.sleep(reconnect_delay)
+            except Exception:
+                logging.exception("Unhandled exception in MQTT task")
+                raise
 
     async def on_mqtt(self, msg: aiomqtt.Message):
         """MQTT message handler, called once per message"""
@@ -175,8 +178,10 @@ async def start_job(ctx: Context, *command):
     reply = await ctx.message.reply("Your job is starting...")
     job = new_job(reply)
     topic = f"{TARGET_NODE}/submit/{job.jid}"
+    logging.debug(f"publishing job {job.jid} to node...")
     try:
         await bot.mq_client.publish(topic, payload=command_string)
+        logging.debug(f"job {job.jid} published")
     except aiomqtt.exceptions.MqttError as ex_mq:
         logging.exception("error publishing job submission")
         await reply.edit(content=f"**Couldn't submit job**: {str(ex_mq)}")
