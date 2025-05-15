@@ -30,7 +30,7 @@ void on_stdout_mqtt(struct job *jobspec, int source_fd, char *buffer, size_t rea
 void gm_publish_job_status(int jid, const char *verb, const char *payload) {
     char topic_buf[512];
     snprintf(topic_buf, sizeof(topic_buf), "job/%d/%s", jid, verb);
-    mosquitto_publish(gm_mosq, NULL, topic_buf, strlen(payload), payload, 2, true);
+    mosquitto_publish(gm_mosq, NULL, topic_buf, strlen(payload), payload, 2, false);
 }
 
 // topic router
