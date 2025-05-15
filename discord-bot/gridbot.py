@@ -161,7 +161,11 @@ async def start_job(ctx: Context, *command):
     reply = await ctx.message.reply("Your job is starting...")
     job = new_job(reply)
     topic = f"{TARGET_NODE}/submit/{job.jid}"
-    await bot.mq_client.publish(topic, payload=command_string)
+    try:
+        await bot.mq_client.publish(topic, payload=command_string)
+    except aiomqtt.exceptions.MqttError as ex_mq:
+        logging.exception("error publishing job submission")
+        await reply.edit(content=f"**Couldn't submit job**: {str(ex_mq)}")
 
 ## startup ##
 bot.run(TOKEN, root_logger=True)
