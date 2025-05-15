@@ -101,6 +101,7 @@ class GridMiiBot(Bot):
         async with aiomqtt.Client(BROKER, PORT,
                                   username=MQTT_USERNAME, password=MQTT_PASSWORD,
                                   tls_params=tls_params) as mq_client:
+            logging.info("Connected to MQTT broker")
             self.mq_client = mq_client
             # subscribe to our topics
             # TODO: listen for shutdown messages
@@ -113,7 +114,7 @@ class GridMiiBot(Bot):
 
     async def on_mqtt(self, msg: aiomqtt.Message):
         """MQTT message handler, called once per message"""
-        print(f"MQTT [#{msg.topic}]: {msg.payload}")
+        logging.debug(f"MQTT [#{msg.topic}]: {msg.payload}")
         topic_path = str(msg.topic).split('/')
 
         if not topic_path:
@@ -163,4 +164,4 @@ async def start_job(ctx: Context, *command):
     await bot.mq_client.publish(topic, payload=command_string)
 
 ## startup ##
-bot.run(TOKEN)
+bot.run(TOKEN, root_logger=True)
