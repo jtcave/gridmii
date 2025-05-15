@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 import logging
 import discord
@@ -27,19 +28,26 @@ class Job:
     contents of that buffer. Standard output/error writes from the job will
     update the output buffer."""
 
+    # TODO: find out how to get this magic number from Discord or discord.py
+    # TODO: check the attachment limit too
+    MESSAGE_LIMIT = 2000    # assume no Nitro
+
     # The bot is responsible for issuing JIDs. Keep track of the last JID issued.
     last_jid: int = 0
 
     def __init__(self, jid: int, output_message: discord.Message):
         self.jid = jid
-        self.output_buffer = b''
+        self.output_buffer = io.BytesIO()
         self.output_message = output_message
+        self.will_attach = False
+
+    def buffer_contents(self) -> str:
+        """Return the contents of the output buffer."""
+        return self.output_buffer.getvalue().decode(errors="replace")
 
     async def startup(self):
         """Called when the job has successfully started."""
-        # don't trash the output message if we already wrote to it for some reason
-        if not self.output_buffer:
-            await self.output_message.edit(content="Your job has started! Stand by for output...")
+        await self.output_message.edit(content="Your job has started! Stand by for output...")
 
     async def reject(self, error: bytes):
         """Called when the job could not start."""
@@ -48,19 +56,33 @@ class Job:
 
     async def write(self, data: bytes):
         """Called when stdout/stderr has been written to and the output buffer needs updated"""
-        self.output_buffer += data
+        self.output_buffer.write(data)
         # TODO: escape the content so triple-backquotes don't wreck the output
-        decoded = self.output_buffer.decode(errors="replace")
-        content = f"Running...\n```\n{decoded}\n```"
-        await self.output_message.edit(content=content)
+        if not self.will_attach:
+            # format the output message
+            content = f"Running...\n```\n{self.buffer_contents()}\n```"
+            if len(content) > Job.MESSAGE_LIMIT:
+                # turns out we will attach
+                self.will_attach = True
+                content = "Running...\n*Output will be attached to this message when the job completes*"
+            await self.output_message.edit(content=content)
 
     async def stopped(self, result: bytes):
-        """Called when the job terminates, successfully or not"""
-        # TODO: decode the result
-        decoded_output = self.output_buffer.decode(errors="replace")
+        """Called when the  job terminates, successfully or not"""
+        # TODO: decode the result code
         result_code = int(result)
-        content = f"Command exited with waitpid status {result_code}\n```\n{decoded_output}\n```"
+        content = f"Command exited with waitpid status {result_code}"
+        if self.will_attach:
+            self.output_buffer.seek(0)
+            attachment = discord.File(self.output_buffer, f"gridmii-output-{self.jid}.txt")
+            try:
+                await self.output_message.add_files(attachment)
+            except discord.HTTPException as http_exc:
+                content += f"\n**Error attaching file:**\n```{str(http_exc)}```"
+        else:
+            content += f"\n```\n{self.buffer_contents()}\n```"
         await self.output_message.edit(content=content)
+        self.output_buffer.close()
 
 # TODO: job table and new_job() need to be part of class Job
 jobs: dict[int, Job] = {}
