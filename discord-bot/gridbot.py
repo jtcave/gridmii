@@ -119,9 +119,9 @@ def new_job(output_message: discord.Message) -> Job:
     """Create fresh job object tied to an output message"""
     Job.last_jid += 1
     jid = Job.last_jid
-    new_job = Job(jid, output_message)
-    jobs[jid] = new_job
-    return new_job
+    new_job_entry = Job(jid, output_message)
+    jobs[jid] = new_job_entry
+    return new_job_entry
 
 ## discord part ##
 
@@ -176,7 +176,6 @@ class GridMiiBot(Bot):
 
     async def on_mqtt(self, msg: aiomqtt.Message):
         """MQTT message handler, called once per message"""
-        logging.debug(f"MQTT [#{msg.topic}]: {msg.payload}")
         topic_path = str(msg.topic).split('/')
 
         if not topic_path:
@@ -191,14 +190,22 @@ class GridMiiBot(Bot):
                 return
             job = jobs[jid]
             match event:
-                case "stdout": await job.write(msg.payload)
-                case "stderr": await job.write(msg.payload)
-                case "startup": await job.startup()
+                case "stdout":
+                    logging.debug(f"got job {jid} stdout: {msg.payload}")
+                    await job.write(msg.payload)
+                case "stderr":
+                    logging.debug(f"got job {jid} stderr: {msg.payload}")
+                    await job.write(msg.payload)
+                case "startup":
+                    logging.info(f"got job start message for {jid}")
+                    await job.startup()
                 case "reject":
                     # TODO: the reject and stopped methods should update the job table automatically
+                    logging.warning(f"got job rejection for {jid}")
                     await job.reject(msg.payload)
                     del jobs[jid]
                 case "stopped":
+                    logging.info(f"got job stop message for {jid}")
                     await job.stopped(msg.payload)
                     del jobs[jid]
 
@@ -235,6 +242,20 @@ async def start_job(ctx: Context, *command):
     except aiomqtt.exceptions.MqttError as ex_mq:
         logging.exception("error publishing job submission")
         await reply.edit(content=f"**Couldn't submit job**: {str(ex_mq)}")
+
+@bot.command()
+async def scram(ctx: Context):
+    """Terminate all jobs across the entire grid"""
+    logging.warning("scram command called")
+    topic = f"{TARGET_NODE}/scram"
+    try:
+        await bot.mq_client.publish(topic)
+    except aiomqtt.MqttError as ex_mq:
+        logging.exception("error publishing scram")
+        await ctx.message.reply(f"**Couldn't send scram request**: {str(ex_mq)}")
+    else:
+        await ctx.message.reply(":+1: wait for the jobs to complete")
+
 
 ## startup ##
 bot.run(TOKEN, root_logger=True)

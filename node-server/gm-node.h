@@ -78,6 +78,9 @@ bool jobs_running(void);
 // Process events for jobs
 void do_job_events(void);
 
+// Terminate all jobs
+void job_scram(void);
+
 /// declarations - event loop ///
 
 // body of event loop

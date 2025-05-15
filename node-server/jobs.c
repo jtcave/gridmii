@@ -4,6 +4,7 @@
 #include <spawn.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <signal.h>
 #include <poll.h>
 #include <sys/wait.h>
 #include <err.h>
@@ -263,6 +264,42 @@ bool jobs_running() {
         }
     }
     return false;
+}
+
+// Kill process group at the given jobspec
+void kill_job(struct job *jobspec) {
+    if (jobspec->job_pid == 0) {
+        // empty job
+        return;
+    }
+    // get the process group to blow away the entirety of the job subprocesses
+    pid_t job_pgroup = getpgid(jobspec->job_pid);
+    if (job_pgroup == -1) {
+        warn("couldn't get process group of pid %d", jobspec->job_pid);
+        return;
+    }
+    // make sure we don't nuke ourselves
+    pid_t my_pgroup = getpgid(getpid());
+    if (my_pgroup == job_pgroup) {
+        warnx("node server and job share process group %d; not killing", my_pgroup);
+        return;
+    }
+    // this is for emergency use, so we may as well SIGKILL
+    killpg(job_pgroup, SIGKILL);
+}
+
+// Terminate all jobs
+void job_scram() {
+    // Killing the pgroup would be sufficient to clean the job table
+    // as the processes dying would eventually close stdio and trigger waitpid
+    fprintf(stderr, "scram invoked");
+    for (int i = 0; i < MAX_JOBS; i++) {
+        struct job *jobspec = &job_table[i];
+        if (job_active(jobspec)) {
+            kill_job(jobspec);
+        }
+    }
+    return;
 }
 
 // Submit a job by providing a shell command
