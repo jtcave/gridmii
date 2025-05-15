@@ -100,7 +100,8 @@ class GridMiiBot(Bot):
 
         await self.wait_until_ready()
 
-        while self.mq_client is not None:
+        logging.info("Starting MQTT task")
+        while True:
             try:
                 async with aiomqtt.Client(BROKER, PORT,
                                           username=MQTT_USERNAME, password=MQTT_PASSWORD,
