@@ -3,6 +3,7 @@ import io
 import json
 import logging
 import discord
+import os
 from discord.ext.commands import Bot, Context
 import aiomqtt
 
@@ -19,6 +20,23 @@ MQTT_PASSWORD = config.get("mqtt_password", "")
 TARGET_NODE = config["target_node"]
 
 ## job table ##
+
+def disposition(status:int) -> str:
+    """Return a string explaining the waitpid status given"""
+    # POSIX doesn't specify the exact values all the wait decoder macros use
+    # This may cause portability issues if the node and bot use different OSes
+    if status == 0:
+        return "Command completed successfully"
+    elif os.WIFEXITED(status):
+        return f"Command completed with status {os.WEXITSTATUS(status)}"
+    elif os.WIFSIGNALED(status):
+        dump_message = " and dumped core" if os.WCOREDUMP(status) else ""
+        return f"Command terminated with signal {os.WTERMSIG(status)}{dump_message}"
+    else:
+        # don't know what happened, let the user figure it out
+        # We don't expect WIFSTOPPED or WIFCONTINUED, so they can fall through here
+        return f"Command exited with waitpid status {status}"
+
 
 # TODO: handle abandoned jobs where we didn't get a termination message
 
@@ -71,7 +89,7 @@ class Job:
         """Called when the  job terminates, successfully or not"""
         # TODO: decode the result code
         result_code = int(result)
-        content = f"Command exited with waitpid status {result_code}"
+        content = disposition(result_code)
         if self.will_attach:
             self.output_buffer.seek(0)
             attachment = discord.File(self.output_buffer, f"gridmii-output-{self.jid}.txt")
@@ -80,7 +98,17 @@ class Job:
             except discord.HTTPException as http_exc:
                 content += f"\n**Error attaching file:**\n```{str(http_exc)}```"
         else:
-            content += f"\n```\n{self.buffer_contents()}\n```"
+            output = self.buffer_contents()
+            if output and not output.isspace():
+                content += f"\n```\n{output}\n```"
+            else:
+                content += "\n*The command had no output*"
+            if len(content) > Job.MESSAGE_LIMIT:
+                # Edge case: the termination message would put the message over the limit
+                # In this case, set will_attach and backpedal.
+                self.will_attach = True
+                await self.stopped(result)
+                return
         await self.output_message.edit(content=content)
         self.output_buffer.close()
 
