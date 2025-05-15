@@ -14,7 +14,6 @@
 
 
 // no-op write callback
-
 void on_write_nothing(struct job *jobspec, int source_fd, char *buffer, size_t readsize) {
     // shut the hell up, clang
     (void)jobspec;
@@ -189,41 +188,56 @@ void poll_job_output(struct job *jobspec) {
     }
 }
 
-// TODO: return something sensible from this
-int poll_job_process_life(struct job *jobspec) {
-    // This is a stub that just waits for the subprocess
-    int stat = 0;
-    if (jobspec->running) {
+// Check whether the subprocess is still alive
+void check_job_subprocess(struct job *jobspec) {
+    if (jobspec->job_pid != 0) {
+        int stat = 0;
         pid_t pid = waitpid(jobspec->job_pid, &stat, WNOHANG);
         if (pid != 0) {
-            // mark job as done
-            jobspec->running = false;
+            fprintf(stderr, "job %d subprocess existed with code %d\n", jobspec->job_id, stat);
+            // clear job pid to mark as defunct (stdout/stderr may still need drained)
+            jobspec->job_pid = 0;
+            // store wait status
             jobspec->exit_stat = stat;
-            // report to broker
-            // TODO: should this be encoded for platform independence?
-            char payload[16];
-            snprintf(payload, sizeof(payload), "%d", stat);
-            gm_publish_job_status(jobspec->job_id, "stopped", payload);
         }
     }
-    return stat;
 }
 
-// returns whether a job is active
+// True iff the subprocess has terminated and output pipes have been closed
+bool job_dead(struct job *jobspec) {
+    return jobspec->job_pid == 0
+            && jobspec->job_stdout == -1
+            && jobspec->job_stderr == -1;
+}
+
+// Check for completed jobs (subprocess quit + stdout/stderr clean) and report to broker
+void collect_job(struct job *jobspec) {
+    if (job_dead(jobspec)) {
+        fprintf(stderr, "job %d done\n", jobspec->job_id);
+        // mark job as done
+        jobspec->running = false;
+        // report termination to broker
+        char payload[16];
+        snprintf(payload, sizeof(payload), "%d", jobspec->exit_stat);
+        gm_publish_job_status(jobspec->job_id, "stopped", payload);
+    }
+}
+
+// True iff the jobspec refers to an active job
+// If this returns false, the jobspec is meaningless
 bool job_active(struct job *jobspec) {
-    return jobspec->running
-            || jobspec->job_stdout != -1
-            || jobspec->job_stderr != -1;
+    return jobspec->running;
 }
 
-// Process events for jobs
+
+// Process events for all entries in the job table
 void do_job_events() {
     for (int i = 0; i < MAX_JOBS; i++) {
         struct job *jobspec = &job_table[i];
         if (job_active(jobspec)) {
-            // TODO: what if there's output to be read after the process dies?
             poll_job_output(jobspec);
-            poll_job_process_life(jobspec);
+            check_job_subprocess(jobspec);
+            collect_job(jobspec);
         }
     }
 }
@@ -261,8 +275,8 @@ int submit_job(uint32_t job_id, write_callback on_write, const char *command) {
         // TODO: less draconian action on transient failures
         err(1, "could not create temp file for job script");
     }
-    int buf_len = strlen(command); // TODO: strnlen for a size cap?
-    // Writing the script in one go might take too long and clog up the event loop.
+    int buf_len = strlen(command); // TODO: use strnlen to enforce a size cap?
+    // Writing a large script in one go might take too long and clog up the event loop.
     // For now we just say this interface is for "a command."
     write(scriptfd, command, buf_len);
     write(scriptfd, "\n", 1);
@@ -276,6 +290,7 @@ int submit_job(uint32_t job_id, write_callback on_write, const char *command) {
         return EUSERS;
     }
     int spawn_code = spawn_job(jobspec, job_id, on_write, argv);
+    fprintf(stderr, "spawn_job() for jid %d returned %d\n", job_id, spawn_code);
 
     // clean up
     //usleep(DELAY_MS);
