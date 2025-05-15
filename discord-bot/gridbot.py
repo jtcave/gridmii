@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import discord
@@ -98,19 +99,26 @@ class GridMiiBot(Bot):
             tls_params = None
 
         await self.wait_until_ready()
-        async with aiomqtt.Client(BROKER, PORT,
-                                  username=MQTT_USERNAME, password=MQTT_PASSWORD,
-                                  tls_params=tls_params) as mq_client:
-            logging.info("Connected to MQTT broker")
-            self.mq_client = mq_client
-            # subscribe to our topics
-            # TODO: listen for shutdown messages
-            for topic in ("general", "job/#"):
-                await mq_client.subscribe(topic)
-            # handle messages
-            async for msg in mq_client.messages:
-                await self.on_mqtt(msg)
-        self.mq_client = None
+
+        while self.mq_client is not None:
+            try:
+                async with aiomqtt.Client(BROKER, PORT,
+                                          username=MQTT_USERNAME, password=MQTT_PASSWORD,
+                                          tls_params=tls_params) as mq_client:
+                    logging.info("Connected to MQTT broker")
+                    self.mq_client = mq_client
+                    # subscribe to our topics
+                    # TODO: listen for shutdown messages
+                    for topic in ("general", "job/#"):
+                        await mq_client.subscribe(topic)
+                    # handle messages
+                    async for msg in mq_client.messages:
+                        await self.on_mqtt(msg)
+                self.mq_client = None
+            except aiomqtt.exceptions.MqttError:
+                reconnect_delay = 3
+                logging.exception(f"Lost connection to broker. Retrying in {reconnect_delay} seconds")
+                await asyncio.sleep(reconnect_delay)
 
     async def on_mqtt(self, msg: aiomqtt.Message):
         """MQTT message handler, called once per message"""
