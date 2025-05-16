@@ -12,6 +12,7 @@ with open("config.json", 'r') as config_file:
     config = json.load(config_file)
 TOKEN = config['token']
 GUILD = discord.Object(id=config['guild'])
+CHANNEL = config.get("channel", None)
 BROKER = config["mqtt_broker"]
 PORT = config["mqtt_port"]
 MQTT_TLS = config.get("mqtt_tls", False)
@@ -134,12 +135,16 @@ class GridMiiBot(Bot):
     def __init__(self, *, intents: discord.Intents):
         super().__init__(command_prefix='$', intents=intents)
         self.mqtt_task = None
+        self.target_channel: discord.TextChannel|None = None
         self.mq_client: aiomqtt.Client|None = None
         self.mq_sent = set()
 
     async def setup_hook(self) -> None:
         # Install the MQTT task.
         self.mqtt_task = self.loop.create_task(self.do_mqtt_task())
+        # Attempt to resolve the target channel name
+        if CHANNEL:
+            self.target_channel = self.get_channel(CHANNEL)
 
     async def do_mqtt_task(self):
         # This is the MQTT task.
@@ -210,6 +215,11 @@ class GridMiiBot(Bot):
                     del jobs[jid]
 
 bot = GridMiiBot(intents=intents)
+
+@bot.check
+def check_channel(ctx: Context) -> bool:
+    """If a channel was specified in the config, check to see if the command was sent in that channel."""
+    return ctx.channel.id == CHANNEL or CHANNEL is None
 
 @bot.command(name="yougood")
 async def ping(ctx: Context):
