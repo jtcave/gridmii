@@ -59,6 +59,9 @@ void init_config() {
 
     char *env_node_name = getenv("GRID_NODE_NAME");
     gm_config.node_name = (env_node_name ? env_node_name : default_node_name());
+    
+    char *env_home = getenv("HOME");
+    gm_config.job_cwd = (env_home ? env_home : "/");
 
     // dump the config for debugging
     puts("Your configuration:");
@@ -68,6 +71,7 @@ void init_config() {
     printf("GRID_USERNAME=%s\n", gm_config.grid_username ? gm_config.grid_username : "(not set)");
     printf("GRID_PASSWORD=%s\n", gm_config.grid_password ? "(set)" : "(not set)");
     printf("NODE_NAME=%s\n", gm_config.node_name);
+    printf("JOB_CWD=%s\n", gm_config.job_cwd);
     puts("");
 }
 

@@ -62,11 +62,14 @@ int spawn_job(struct job *jobspec, uint32_t job_id, write_callback on_write, cha
         return EFAULT;
     }
 
-    // initialize these for the required fields
+    // initialize posix_spawn parameter objects
     posix_spawn_file_actions_t file_actions;
     posix_spawn_file_actions_init(&file_actions);
     posix_spawnattr_t attr;
     posix_spawnattr_init(&attr);
+
+    // set child working directory
+    posix_spawn_file_actions_addchdir(&file_actions, gm_config.job_cwd);
 
     // Put process in a new process group
     short spawn_flags = 0;

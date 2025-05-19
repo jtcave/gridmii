@@ -13,12 +13,13 @@
 
 // configuration table struct
 struct gm_config_data {
-    const char *grid_host;
-    int grid_port;
-    bool use_tls;
-    const char *grid_username;
-    const char *grid_password;
-    const char *node_name;
+    const char *grid_host;      // MQTT broker hostname
+    int grid_port;              // MQTT broker port
+    bool use_tls;               // whether using TLS for MQTT
+    const char *grid_username;  // MQTT username
+    const char *grid_password;  // MQTT password
+    const char *node_name;      // name of node in the grid
+    const char *job_cwd;        // starting directory for jobs
 };
 
 // global configuration table
