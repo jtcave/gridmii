@@ -2,6 +2,7 @@ import asyncio
 import io
 import json
 import logging
+from typing import Self
 import discord
 import os
 from discord.ext.commands import Bot, Context
@@ -39,13 +40,15 @@ def disposition(status:int) -> str:
         return f"Command exited with waitpid status {status}"
 
 
-# TODO: handle abandoned jobs where we didn't get a termination message
+
 
 class Job:
     """Represents a running job somewhere in the grid. A Job object a numeric
     JID (job ID) with an output buffer and a Discord message that displays the
     contents of that buffer. Standard output/error writes from the job will
     update the output buffer."""
+
+    table: dict[int, Self] = {}
 
     # TODO: find out how to get this magic number from Discord or discord.py
     # TODO: check the attachment limit too
@@ -60,6 +63,15 @@ class Job:
         self.output_message = output_message
         self.will_attach = False
 
+    @classmethod
+    def new_job(cls, output_message: discord.Message) -> Self:
+        """Create fresh job object tied to an output message"""
+        cls.last_jid += 1
+        jid = cls.last_jid
+        new_job_entry = cls(jid, output_message)
+        cls.table[jid] = new_job_entry
+        return new_job_entry
+
     def buffer_contents(self) -> str:
         """Return the contents of the output buffer."""
         return self.output_buffer.getvalue().decode(errors="replace")
@@ -72,6 +84,7 @@ class Job:
         """Called when the job could not start."""
         content = f"**Could not start job:** `{error.decode(errors="replace")}`"
         await self.output_message.edit(content=content)
+        del Job.table[self.jid]
 
     async def write(self, data: bytes):
         """Called when stdout/stderr has been written to and the output buffer needs updated"""
@@ -88,10 +101,11 @@ class Job:
 
     async def stopped(self, result: bytes):
         """Called when the  job terminates, successfully or not"""
-        # TODO: decode the result code
+        # Decode the result code
         result_code = int(result)
         content = disposition(result_code)
         if self.will_attach:
+            # Upload the output buffer as an attachment
             self.output_buffer.seek(0)
             attachment = discord.File(self.output_buffer, f"gridmii-output-{self.jid}.txt")
             try:
@@ -99,6 +113,7 @@ class Job:
             except discord.HTTPException as http_exc:
                 content += f"\n**Error attaching file:**\n```{str(http_exc)}```"
         else:
+            # Stuff the output buffer into the reply message
             output = self.buffer_contents()
             if output and not output.isspace():
                 content += f"\n```\n{output}\n```"
@@ -112,17 +127,8 @@ class Job:
                 return
         await self.output_message.edit(content=content)
         self.output_buffer.close()
+        del Job.table[self.jid]
 
-# TODO: job table and new_job() need to be part of class Job
-jobs: dict[int, Job] = {}
-
-def new_job(output_message: discord.Message) -> Job:
-    """Create fresh job object tied to an output message"""
-    Job.last_jid += 1
-    jid = Job.last_jid
-    new_job_entry = Job(jid, output_message)
-    jobs[jid] = new_job_entry
-    return new_job_entry
 
 ## discord part ##
 
@@ -190,10 +196,10 @@ class GridMiiBot(Bot):
             # job status update
             _, jid, event = topic_path
             jid = int(jid)
-            if jid not in jobs:
+            if jid not in Job.table:
                 logging.warning(f"got message for spurious job {jid}")
                 return
-            job = jobs[jid]
+            job = Job.table[jid]
             match event:
                 case "stdout":
                     logging.debug(f"got job {jid} stdout: {msg.payload}")
@@ -205,14 +211,11 @@ class GridMiiBot(Bot):
                     logging.info(f"got job start message for {jid}")
                     await job.startup()
                 case "reject":
-                    # TODO: the reject and stopped methods should update the job table automatically
                     logging.warning(f"got job rejection for {jid}")
                     await job.reject(msg.payload)
-                    del jobs[jid]
                 case "stopped":
                     logging.info(f"got job stop message for {jid}")
                     await job.stopped(msg.payload)
-                    del jobs[jid]
 
 bot = GridMiiBot(intents=intents)
 
@@ -243,7 +246,7 @@ async def start_job(ctx: Context, *command):
     command_string = ' '.join(command)
 
     reply = await ctx.message.reply("Your job is starting...")
-    job = new_job(reply)
+    job = Job.new_job(reply)
     topic = f"{TARGET_NODE}/submit/{job.jid}"
     logging.debug(f"publishing job {job.jid} to node...")
     try:
