@@ -39,9 +39,6 @@ def disposition(status:int) -> str:
         # We don't expect WIFSTOPPED or WIFCONTINUED, so they can fall through here
         return f"Command exited with waitpid status {status}"
 
-
-
-
 class Job:
     """Represents a running job somewhere in the grid. A Job object a numeric
     JID (job ID) with an output buffer and a Discord message that displays the
@@ -62,6 +59,8 @@ class Job:
         self.output_buffer = io.BytesIO()
         self.output_message = output_message
         self.will_attach = False
+        self.started = False
+        self.target_node = TARGET_NODE
 
     @classmethod
     def new_job(cls, output_message: discord.Message) -> Self:
@@ -79,15 +78,29 @@ class Job:
     async def startup(self):
         """Called when the job has successfully started."""
         await self.output_message.edit(content="Your job has started! Stand by for output...")
+        self.started = True
 
     async def reject(self, error: bytes):
         """Called when the job could not start."""
         content = f"**Could not start job:** `{error.decode(errors="replace")}`"
         await self.output_message.edit(content=content)
-        del Job.table[self.jid]
+        del self.table[self.jid]
+
+    async def clean_if_unstarted(self, delay=20.0):
+        """A task that will terminate jobs that did not start in a reasonable amount of time.
+        This is meant to be scheduled as a task in the event loop."""
+        # default delay is a preposterous number, but my test setup is *very* high latency
+        await asyncio.sleep(delay)
+        if not self.started:
+            logging.warning(f"job {self.jid} did not start on node {self.target_node}")
+            await self.output_message.edit(content=":x: Your job did not start. The node might not be online.")
+            del self.table[self.jid]
+
 
     async def write(self, data: bytes):
         """Called when stdout/stderr has been written to and the output buffer needs updated"""
+        if not self.started:
+            logging.warning(f"jid {self.jid} got write message before starting")
         self.output_buffer.write(data)
         # TODO: escape the content so triple-backquotes don't wreck the output
         if not self.will_attach:
@@ -252,6 +265,7 @@ async def start_job(ctx: Context, *command):
     try:
         await bot.mq_client.publish(topic, payload=command_string)
         logging.debug(f"job {job.jid} published")
+        bot.loop.create_task(job.clean_if_unstarted())
     except aiomqtt.exceptions.MqttError as ex_mq:
         logging.exception("error publishing job submission")
         await reply.edit(content=f"**Couldn't submit job**: {str(ex_mq)}")
