@@ -16,6 +16,31 @@
 // exit code for a job that failed to exec for one reason or another
 #define SPAWN_FAILURE 0xEE
 
+// environment variables that should not be set in the child
+const char *envs_to_scrub[] = {
+    // our proprietary configuration settings
+    "GRID_HOST",
+    "GRID_PORT",
+    "GRID_TLS",
+    "GRID_USERNAME",
+    "GRID_PASSWORD",
+    "GRID_NODE_NAME",
+    "GRID_JOB_CWD",
+
+    // terminal settings (these would mislead the program into)
+    "TERM",
+    "TERM_PROGRAM",
+    "TERM_PROGRAM_VERSION",
+    "TMUX_PANE",
+    "COLUMNS",
+
+    // SSH info (we don't want to leak the operator's IP!)
+    "SSH_CLIENT",
+    "SSH_CONNECTION",
+    "SSH_TTY",
+    NULL
+};
+
 // no-op write callback
 void on_write_nothing(struct job *jobspec, int source_fd, char *buffer, size_t readsize) {
     // shut the hell up, clang
@@ -84,10 +109,6 @@ int spawn_job(struct job *jobspec, uint32_t job_id, write_callback on_write, cha
     // for now we just widow the pipe so the subprocess sees EOF
     close(stdin_pipe[1]);
 
-    // TODO: build an environment for the subprocess instead of just slurping up the host's
-    //       (this is an awful dirty hack for development purposes)
-    extern char **environ;
-
     // flush stdio before forking
     fflush(stdout);
     fflush(stderr);
@@ -139,6 +160,22 @@ int spawn_job(struct job *jobspec, uint32_t job_id, write_callback on_write, cha
             // The node operator needs a chance to fix it before putting a
             // busted node in the grid.
             err(SPAWN_FAILURE, "could not chdir to node's GRID_JOB_CWD");
+        }
+
+        // TODO: build an environment for the subprocess instead of just slurping up the host's
+        //       (this is an awful dirty hack for development purposes)
+        extern char **environ;
+
+        // scrub the environment
+        // TODO: this really should be an allowlist instead of a denylist
+        const char *env_key = envs_to_scrub[0];
+        int i = 0;
+        while (env_key != NULL) {
+            int rv = unsetenv(env_key);
+            if (rv == -1) {
+                err(SPAWN_FAILURE, "could not scrub environment from key %s", env_key);
+            }
+            env_key = envs_to_scrub[++i];
         }
 
         // exec the new process
