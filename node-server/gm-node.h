@@ -25,6 +25,9 @@ struct gm_config_data {
 // global configuration table
 extern struct gm_config_data gm_config;
 
+// flag that suppresses our atexit function in the child process
+extern bool gm_in_child;
+
 /// declarations - mqtt ///
 
 // global mosquitto object

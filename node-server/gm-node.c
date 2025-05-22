@@ -25,6 +25,9 @@
 // global configuration table
 struct gm_config_data gm_config;
 
+// flag that suppresses our atexit function in the child process
+bool gm_in_child = false;
+
 // get the default client name for mqtt (currently the system hostname)
 const char *default_node_name() {
     static char nodebuffer[MOSQ_MQTT_ID_MAX_LENGTH + 1] = {0};
@@ -60,8 +63,11 @@ void init_config() {
     char *env_node_name = getenv("GRID_NODE_NAME");
     gm_config.node_name = (env_node_name ? env_node_name : default_node_name());
     
+    char *env_job_cwd = getenv("GRID_JOB_CWD");
     char *env_home = getenv("HOME");
-    gm_config.job_cwd = (env_home ? env_home : "/");
+    gm_config.job_cwd = (env_job_cwd ? env_job_cwd :
+        (env_home ? env_home :
+            "/"));
 
     // dump the config for debugging
     puts("Your configuration:");
@@ -71,11 +77,14 @@ void init_config() {
     printf("GRID_USERNAME=%s\n", gm_config.grid_username ? gm_config.grid_username : "(not set)");
     printf("GRID_PASSWORD=%s\n", gm_config.grid_password ? "(set)" : "(not set)");
     printf("NODE_NAME=%s\n", gm_config.node_name);
-    printf("JOB_CWD=%s\n", gm_config.job_cwd);
+    printf("GRID_JOB_CWD=%s\n", gm_config.job_cwd);
     puts("");
 }
 
 void exit_cleanup(void) {
+    // Don't do anything if this is one of the child processes
+    if (gm_in_child) return;
+
     // clean up job scripts
     // TODO: this is a horrendous hack
     // at the very least, it should be done when a job exits and no jobs

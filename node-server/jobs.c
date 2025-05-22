@@ -13,6 +13,8 @@
 
 #include "gm-node.h"
 
+// exit code for a job that failed to exec for one reason or another
+#define SPAWN_FAILURE 0xEE
 
 // no-op write callback
 void on_write_nothing(struct job *jobspec, int source_fd, char *buffer, size_t readsize) {
@@ -46,8 +48,6 @@ void init_job_table() {
 
 // Start a job, including the process it monitors
 int spawn_job(struct job *jobspec, uint32_t job_id, write_callback on_write, char *const *argv) {
-    int code = 0;
-
     // initialize the jobspec
     init_job(jobspec);
     jobspec->job_id = job_id;
@@ -62,21 +62,6 @@ int spawn_job(struct job *jobspec, uint32_t job_id, write_callback on_write, cha
         return EFAULT;
     }
 
-    // initialize posix_spawn parameter objects
-    posix_spawn_file_actions_t file_actions;
-    posix_spawn_file_actions_init(&file_actions);
-    posix_spawnattr_t attr;
-    posix_spawnattr_init(&attr);
-
-    // set child working directory
-    posix_spawn_file_actions_addchdir(&file_actions, gm_config.job_cwd);
-
-    // Put process in a new process group
-    short spawn_flags = 0;
-    posix_spawnattr_getflags(&attr, &spawn_flags);
-    spawn_flags |= POSIX_SPAWN_SETPGROUP;
-    posix_spawnattr_setflags(&attr, spawn_flags);
-
     // create pipes for child stdio
     // TODO: handle errors more gracefully
     int stdin_pipe[2], stdout_pipe[2], stderr_pipe[2];
@@ -84,18 +69,16 @@ int spawn_job(struct job *jobspec, uint32_t job_id, write_callback on_write, cha
         err(1, "could not create pipe for stdout");
     }
     jobspec->job_stdout = stdout_pipe[0];
-    posix_spawn_file_actions_adddup2(&file_actions, stdout_pipe[1], STDOUT_FILENO);
 
     if (pipe(stderr_pipe) != 0) {
         err(1, "could not create pipe for stdout");
     }
     jobspec->job_stderr = stderr_pipe[0];
-    posix_spawn_file_actions_adddup2(&file_actions, stderr_pipe[1], STDERR_FILENO);
 
     if (pipe(stdin_pipe) != 0) {
         err(1, "could not create pipe for stdin");
     }
-    posix_spawn_file_actions_adddup2(&file_actions, stdin_pipe[0], STDIN_FILENO);
+    //jobspec->job_stdin = stdin_pipe[1];
     
     // TODO: hook the write side of stdin pipe to the jobspec/event loop
     // for now we just widow the pipe so the subprocess sees EOF
@@ -105,30 +88,76 @@ int spawn_job(struct job *jobspec, uint32_t job_id, write_callback on_write, cha
     //       (this is an awful dirty hack for development purposes)
     extern char **environ;
 
-    // do the spawn!
-    int rv = posix_spawnp(&(jobspec->job_pid), argv[0], &file_actions, &attr, argv, environ);
-    if (rv != 0) {
-        // process spawn failed, nuke the jobspec and report failure
-        // TODO: do we need to close the pipes?
-        fprintf(stderr, "couldn't spawn subprocess: %s", strerror(rv));
+    // flush stdio before forking
+    fflush(stdout);
+    fflush(stderr);
+
+    // fork a subprocess
+    int child_pid = fork();
+    if (child_pid == -1) {
+        // fork failed, break the bad news
+        int problem_code = errno;
+        warn("couldn't spawn subprocess");
+        // clean up
         init_job(jobspec);
-        code = rv;
+        close(stdin_pipe[0]); close(stdin_pipe[1]);
+        close(stdout_pipe[0]); close(stdout_pipe[1]);
+        close(stderr_pipe[0]); close(stderr_pipe[1]);
+        return problem_code;
+    }
+    else if (child_pid == 0) {
+        // In child process. Initialize the job.
+
+        // First we disarm atexit
+        gm_in_child = true;
+
+        // Wire up stdio descriptors to the parent.
+        // XXX: These error messages are going to go to the node server console,
+        //      not to the user. It'll just look like the job quit with a weird
+        //      error code.
+        if (dup2(stdin_pipe[0], STDIN_FILENO) == -1) {
+            err(SPAWN_FAILURE, "could not dup2 stdin while bringing up job");
+        }
+        if (dup2(stdout_pipe[1], STDOUT_FILENO) == -1) {
+            err(SPAWN_FAILURE, "could not dup2 stdout while bringing up job");
+        }
+        if (dup2(stderr_pipe[1], STDERR_FILENO) == -1) {
+            err(SPAWN_FAILURE, "could not dup2 stderr while bringing up job");
+        }
+        // From now on, stderr goes to the parent and the user will see our
+        // error messages.
+
+        // Next, we enter a new session, detaching from the terminal.
+        if (setsid() == -1) {
+            err(SPAWN_FAILURE, "could not create session (process group) for job");
+        }
+
+        // chdir to our new working directory
+        if (chdir(gm_config.job_cwd) == -1) {
+            // TODO: should this be an error?
+            // Shouldn't we also at least stat() the putative job_cwd first?
+            // The node operator needs a chance to fix it before putting a
+            // busted node in the grid.
+            err(SPAWN_FAILURE, "could not chdir to node's GRID_JOB_CWD");
+        }
+
+        // exec the new process
+        execve(argv[0], argv, environ);
+        
+        // exec failed, break the bad news
+        err(SPAWN_FAILURE, "could not exeve new process");
     }
     else {
+        // in parent process
+        jobspec->job_pid = child_pid;
         jobspec->running = true;
+        // Orphan the pipes in the parent parent process
+        // This ensures the pipes will deliver EOF when the subprocess exits
+        close(stdout_pipe[1]);
+        close(stderr_pipe[1]);
+        close(stdin_pipe[0]);
+        return 0;
     }
-
-    // close the unused sides of the pipes in this parent process,
-    // so the pipes will deliver EOF when the subprocess exits
-    close(stdout_pipe[1]);
-    close(stderr_pipe[1]);
-    close(stdin_pipe[0]);
-
-    // clean up file actions/attr
-    posix_spawnattr_destroy(&attr);
-    posix_spawn_file_actions_destroy(&file_actions);
-
-    return code;
 }
 
 // Close the given file descriptor in the job.
