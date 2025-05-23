@@ -198,6 +198,9 @@ class Node:
         logging.debug(f"job {job.jid} published")
         return job
 
+    def __str__(self):
+        return self.node_name
+
 
 ## discord part ##
 
@@ -348,6 +351,21 @@ async def start_job(ctx: Context, *command):
     except aiomqtt.exceptions.MqttError as ex_mq:
         logging.exception("error publishing job submission")
         await reply.edit(content=f"**Couldn't submit job**: {str(ex_mq)}")
+
+@bot.command()
+async def nodes(ctx: Context):
+    """Dump the node table"""
+    message = '\n'.join(str(j) for j in Node.table)
+    await ctx.message.reply(content=message)
+
+@bot.command()
+async def locus(ctx: Context, new_locus: str):
+    """Manually set the locus node for the $sh command"""
+    if new_locus in Node.table:
+        Node.locus = new_locus
+        await ctx.reply(f":+1: Commands will now run on {new_locus}")
+    else:
+        await ctx.reply(f":x: The node {new_locus} is not in the node table.")
 
 @bot.command()
 async def scram(ctx: Context):
