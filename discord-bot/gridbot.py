@@ -19,7 +19,7 @@ PORT = config["mqtt_port"]
 MQTT_TLS = config.get("mqtt_tls", False)
 MQTT_USERNAME = config.get("mqtt_username", "")
 MQTT_PASSWORD = config.get("mqtt_password", "")
-TARGET_NODE = config["target_node"]
+TARGET_NODE = config.get("target_node", None)
 
 ## job table ##
 
@@ -54,20 +54,20 @@ class Job:
     # The bot is responsible for issuing JIDs. Keep track of the last JID issued.
     last_jid: int = 0
 
-    def __init__(self, jid: int, output_message: discord.Message):
+    def __init__(self, jid: int, output_message: discord.Message, target_node_name: str):
         self.jid = jid
         self.output_buffer = io.BytesIO()
         self.output_message = output_message
         self.will_attach = False
         self.started = False
-        self.target_node = TARGET_NODE
+        self.target_node = target_node_name
 
     @classmethod
-    def new_job(cls, output_message: discord.Message) -> Self:
+    def new_job(cls, output_message: discord.Message, target_node_name: str) -> Self:
         """Create fresh job object tied to an output message"""
         cls.last_jid += 1
         jid = cls.last_jid
-        new_job_entry = cls(jid, output_message)
+        new_job_entry = cls(jid, output_message, target_node_name)
         cls.table[jid] = new_job_entry
         return new_job_entry
 
@@ -147,6 +147,7 @@ class Node:
     """Represents a node in the grid"""
 
     table: dict[str, Self] = {}
+    locus: str|None = TARGET_NODE
 
     def __init__(self, node_name):
         self.node_name = node_name
@@ -154,8 +155,17 @@ class Node:
     @classmethod
     def pick_node(cls) -> Self|None:
         """Select a node that can accept a job. If there are no available nodes, return None"""
-        # TODO: actually pick a node from the table
-        return cls.table.get(TARGET_NODE, None)
+        # Our first crude node selector logic:
+        # * Prefer the last node used
+        # * If that node is gone, pick a node that can accept jobs
+        if cls.locus in cls.table:
+            return cls.table[cls.locus]
+        else:
+            for node in cls.table.values():
+                if node.can_accept_jobs():
+                    cls.locus = node.node_name
+                    return node
+            return None
 
     @classmethod
     def node_seen(cls, node_name: str):
@@ -175,9 +185,13 @@ class Node:
         """Called when a node already in the table responds to a ping"""
         pass
 
+    def can_accept_jobs(self):
+        # stub for now
+        return True
+
     async def submit_job(self, command_string: str, output_message: discord.Message) -> Job:
         """Submit a job to the node"""
-        job = Job.new_job(output_message)
+        job = Job.new_job(output_message, self.node_name)
         topic = f"{self.node_name}/submit/{job.jid}"
         logging.debug(f"publishing job {job.jid} to node...")
         await bot.mq_client.publish(topic, payload=command_string)
@@ -339,9 +353,8 @@ async def start_job(ctx: Context, *command):
 async def scram(ctx: Context):
     """Terminate all jobs across the entire grid"""
     logging.warning("scram command called")
-    topic = f"{TARGET_NODE}/scram"
     try:
-        await bot.mq_client.publish(topic)
+        await bot.mq_client.publish("grid/scram")
     except aiomqtt.MqttError as ex_mq:
         logging.exception("error publishing scram")
         await ctx.message.reply(f"**Couldn't send scram request**: {str(ex_mq)}")
