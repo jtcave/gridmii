@@ -111,26 +111,12 @@ void subscribe_topics() {
     // buffer for topic string
     char topic_buf[512];
 
-    // subscribe to job submit endpoint
+    // subscribe to node endpoint pattern
     int rv;
-    snprintf(topic_buf, sizeof(topic_buf), "%s/submit/+", gm_config.node_name);
+    snprintf(topic_buf, sizeof(topic_buf), "%s/#", gm_config.node_name);
     rv = mosquitto_subscribe(gm_mosq, NULL, topic_buf, 2);
     if (rv != MOSQ_ERR_SUCCESS) {
-        errx(1, "could not subscribe, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
-    }
-
-    // subscribe to scram endpoint
-    snprintf(topic_buf, sizeof(topic_buf), "%s/scram", gm_config.node_name);
-    rv = mosquitto_subscribe(gm_mosq, NULL, topic_buf, 2);
-    if (rv != MOSQ_ERR_SUCCESS) {
-        errx(1, "could not subscribe, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
-    }
-
-    // subscribe to exit endpoint
-    snprintf(topic_buf, sizeof(topic_buf), "%s/exit", gm_config.node_name);
-    rv = mosquitto_subscribe(gm_mosq, NULL, topic_buf, 2);
-    if (rv != MOSQ_ERR_SUCCESS) {
-        errx(1, "could not subscribe, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
+        errx(1, "could not subscribe to node topics, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
     }
 }
 
