@@ -79,6 +79,12 @@ void init_config() {
     printf("NODE_NAME=%s\n", gm_config.node_name);
     printf("GRID_JOB_CWD=%s\n", gm_config.job_cwd);
     puts("");
+
+    // do some sanity checking
+    // Because we use "grid/#" topics for broadcast messages, you can't name a node `grid`
+    if (strcasecmp("grid", gm_config.node_name) == 0) {
+        errx(1, "NODE_NAME can't be 'grid'");
+    }
 }
 
 void exit_cleanup(void) {

@@ -113,6 +113,6 @@ void gm_route_message(const struct mosquitto_message *message) {
     
     // unrecognized topic, complain
     else {
-        fprintf(stderr, "don't understand topic '%s'", message->topic);
+        fprintf(stderr, "don't understand topic '%s'\n", message->topic);
     }
 }
