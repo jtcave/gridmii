@@ -35,7 +35,7 @@ void gm_publish_job_status(int jid, const char *verb, const char *payload) {
 
 // topic router
 
-/* Adding a new topic requires:
+/* Adding a new node topic requires:
  *  - extending the topic_patterns array
  *  - making a new entry in the enum for the topic
  *  - adding dispatch and handling code to gm_route_message()
@@ -109,6 +109,12 @@ void gm_route_message(const struct mosquitto_message *message) {
     // exit endpoint
     else if (strcmp(message->topic, topic_patterns[TOPIC_EXIT]) == 0) {
         gm_shutdown();
+    }
+
+    // Next come the broadcast topics
+    // broadcast ping
+    else if (strcmp(message->topic, "grid/ping") == 0) {
+        gm_announce();
     }
     
     // unrecognized topic, complain

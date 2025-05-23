@@ -41,6 +41,9 @@ struct mosquitto *gm_init_mqtt(void);
 // Connect to the broker and subscribe to topics
 void gm_connect_mqtt(void);
 
+// Announce the node's existence to the grid
+void gm_announce(void);
+
 // Process MQTT events. This is to be called by the main event loop after polling the socket.
 // mosq - a mosquitto object
 // revents - the `revents` field from the poll(2) call pertaining to the socket

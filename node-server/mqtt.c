@@ -69,7 +69,7 @@ struct mosquitto *gm_init_mqtt(void) {
     
     // declare last will of client
     // TODO: currently it just writes the client name to the `disconnect` topic - is that ideal? 
-    rv = mosquitto_will_set(gm_mosq, "disconnect", strlen(client_name), client_name, 0, false);
+    rv = mosquitto_will_set(gm_mosq, "node/disconnect", strlen(client_name), client_name, 1, false);
     if (rv != MOSQ_ERR_SUCCESS) {
         errx(1, "could not set last will, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
     }
@@ -172,6 +172,7 @@ void has_connected(struct mosquitto *mosq, void *obj, int rc) {
     }
     else {
         puts("Connected to MQTT");
+        gm_announce();
     }
 }
 
@@ -189,12 +190,27 @@ void has_message(struct mosquitto *mosq, void *obj, const struct mosquitto_messa
     gm_route_message(message);
 }
 
-// TODO: move this somewhere else
+// TODO: move these somewhere else
 
-void gm_shutdown() {
-    int rv = mosquitto_disconnect(gm_mosq);
+// Announce the node's existence to the grid
+void gm_announce(void) {
+    int rv = mosquitto_publish(gm_mosq, NULL, "node/connect", strlen(gm_config.node_name), gm_config.node_name, 1, false);
     if (rv != MOSQ_ERR_SUCCESS) {
-        errx(1, "could not disconnect from broker, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
+        errx(1, "could not announce, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
+    }
+}
+
+// Disconnect from the broker and free resources
+void gm_shutdown() {
+    // Send disconect message 
+    int rv = mosquitto_publish(gm_mosq, NULL, "node/disconnect", strlen(gm_config.node_name), gm_config.node_name, 1, false);
+    if (rv != MOSQ_ERR_SUCCESS) {
+        // we're shutting down anyway, may as well warn instead of err
+        warnx("could not send farewell, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
+    }
+    rv = mosquitto_disconnect(gm_mosq);
+    if (rv != MOSQ_ERR_SUCCESS) {
+        warnx("could not disconnect from broker, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
     }
 
     mosquitto_destroy(gm_mosq);
