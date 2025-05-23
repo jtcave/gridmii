@@ -142,11 +142,53 @@ class Job:
         self.output_buffer.close()
         del Job.table[self.jid]
 
+## Node table ##
+class Node:
+    """Represents a node in the grid"""
+
+    table: dict[str, Self] = {}
+
+    def __init__(self, node_name):
+        self.node_name = node_name
+
+    @classmethod
+    def pick_node(cls) -> Self|None:
+        """Select a node that can accept a job. If there are no available nodes, return None"""
+        # TODO: actually pick a node from the table
+        return cls.table.get(TARGET_NODE, None)
+
+    @classmethod
+    def node_seen(cls, node_name: str):
+        """Register the presence of the node with the given name, ensuring its presence in the table"""
+        if node_name not in cls.table:
+            cls.table[node_name] = cls(node_name)
+        else:
+            cls.table[node_name].touch()
+
+    @classmethod
+    def node_gone(cls, node_name: str):
+        """Remove the node with the given name from the table."""
+        if node_name in cls.table:
+            del cls.table[node_name]
+
+    def touch(self):
+        """Called when a node already in the table responds to a ping"""
+        pass
+
+    async def submit_job(self, command_string: str, output_message: discord.Message) -> Job:
+        """Submit a job to the node"""
+        job = Job.new_job(output_message)
+        topic = f"{self.node_name}/submit/{job.jid}"
+        logging.debug(f"publishing job {job.jid} to node...")
+        await bot.mq_client.publish(topic, payload=command_string)
+        logging.debug(f"job {job.jid} published")
+        return job
+
 
 ## discord part ##
 
-intents = discord.Intents.default()
-intents.message_content = True
+bot_intents = discord.Intents.default()
+bot_intents.message_content = True
 
 class GridMiiBot(Bot):
     """Discord client that accepts GridMii commands and processes MQTT messages"""
@@ -166,7 +208,8 @@ class GridMiiBot(Bot):
             self.target_channel = self.get_channel(CHANNEL)
 
     async def do_mqtt_task(self):
-        # This is the MQTT task.
+        """Coroutine that sets up the MQTT client and processes inbound messages.
+        This is meant to be scheduled in the bot's event loop."""
         if MQTT_TLS:
             tls_params = aiomqtt.TLSParameters()
         else:
@@ -183,9 +226,10 @@ class GridMiiBot(Bot):
                 async with self.mq_client:
                     logging.info("Connected to MQTT broker, now subscribing")
                     # subscribe to our topics
-                    # TODO: listen for shutdown messages
-                    for topic in ("general", "job/#"):
+                    for topic in ("job/#", "node/#"):
                         await self.mq_client.subscribe(topic)
+                    # send out a ping to enumerate the nodes
+                    await self.ping_grid()
                     # handle messages
                     logging.info("MQTT ready")
                     async for msg in self.mq_client.messages:
@@ -198,8 +242,12 @@ class GridMiiBot(Bot):
                 logging.exception("Unhandled exception in MQTT task")
                 raise
 
+    async def ping_grid(self):
+        await self.mq_client.publish("grid/ping")
+
     async def on_mqtt(self, msg: aiomqtt.Message):
         """MQTT message handler, called once per message"""
+        logging.debug("MQTT %s: %s", str(msg.topic), msg.payload)
         topic_path = str(msg.topic).split('/')
 
         if not topic_path:
@@ -230,7 +278,18 @@ class GridMiiBot(Bot):
                     logging.info(f"got job stop message for {jid}")
                     await job.stopped(msg.payload)
 
-bot = GridMiiBot(intents=intents)
+        elif topic_path[0] == "node" and len(topic_path) == 2:
+            # node status update
+            node_name = msg.payload.decode()
+            match topic_path[1]:
+                case "connect":
+                    logging.info(f"node {node_name} is present")
+                    Node.node_seen(node_name)
+                case "disconnect":
+                    logging.info(f"node {node_name} has left")
+                    Node.node_gone(node_name)
+
+bot = GridMiiBot(intents=bot_intents)
 
 @bot.check
 def check_channel(ctx: Context) -> bool:
@@ -256,15 +315,21 @@ async def start_job(ctx: Context, *command):
         await ctx.send("**internal error!**")
         return
 
+    # pick a node
+    node = Node.pick_node()
+    if node is None:
+        await ctx.message.reply(":x: No nodes are available at the moment.")
+        return
+
+    # Format the command string to submit
     command_string = ' '.join(command)
 
+    # Post the reply that job output will go to
     reply = await ctx.message.reply("Your job is starting...")
-    job = Job.new_job(reply)
-    topic = f"{TARGET_NODE}/submit/{job.jid}"
-    logging.debug(f"publishing job {job.jid} to node...")
+
+    # Submit the job
     try:
-        await bot.mq_client.publish(topic, payload=command_string)
-        logging.debug(f"job {job.jid} published")
+        job = await node.submit_job(command_string, reply)
         bot.loop.create_task(job.clean_if_unstarted())
     except aiomqtt.exceptions.MqttError as ex_mq:
         logging.exception("error publishing job submission")
