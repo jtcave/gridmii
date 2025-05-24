@@ -8,3 +8,6 @@ export GRID_PORT=1883
 ## Your username and password will be assigned to you by GridMii staff.
 # export GRID_USERNAME=fihp
 # export GRID_PASSWORD=hunter2
+
+## By default, jobs will start in the user's home directory. Set GRID_JOB_CWD to override this.
+# export GRID_JOB_CWD=/mnt/gridmii
