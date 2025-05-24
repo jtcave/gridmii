@@ -1,4 +1,4 @@
-CFLAGS=-Wall -g -fsanitize=address
+CFLAGS=-Wall -Os
 LDLIBS=-lmosquitto
 
 # pull in Homebrew on macOS
