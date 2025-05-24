@@ -355,7 +355,7 @@ async def start_job(ctx: Context, *command):
 @bot.command()
 async def nodes(ctx: Context):
     """Dump the node table"""
-    message = '\n'.join(str(j) for j in Node.table)
+    message = '\n'.join(f"* {n}" for n in Node.table) if Node.table else "No nodes are online"
     await ctx.message.reply(content=message)
 
 @bot.command()
