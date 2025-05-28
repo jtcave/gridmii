@@ -401,13 +401,18 @@ async def nodes(ctx: Context):
 @bot.command()
 async def locus(ctx: Context, new_locus: str|None=None):
     """Manually set the locus node for the $sh command"""
+
     if new_locus is None:
-        await ctx.reply(f"Commands are being sent to {Node.locus}")
+        if Node.locus is None:
+            content = "No node is currently set to run commands.\nOne will be selected when the next command is sent."
+        else:
+            content = f"Commands are being sent to {Node.locus}"
     elif new_locus in Node.table:
         Node.locus = new_locus
-        await ctx.reply(f":+1: Commands will now run on {new_locus}")
+        content = f":+1: Commands will now run on {new_locus}"
     else:
-        await ctx.reply(f":x: The node {new_locus} is not in the node table.")
+        content = f":x: The node {new_locus} is not in the node table."
+    await ctx.reply(content)
 
 @bot.command()
 async def scram(ctx: Context):
