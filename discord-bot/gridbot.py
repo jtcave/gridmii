@@ -84,12 +84,14 @@ class Job:
         """Called when the job could not start."""
         content = f"**Could not start job:** `{error.decode(errors="replace")}`"
         await self.output_message.edit(content=content)
+        self.started = True     # don't let the clean_if_unstarted task fire
         del self.table[self.jid]
 
     async def clean_if_unstarted(self, delay=20.0):
         """A task that will terminate jobs that did not start in a reasonable amount of time.
         This is meant to be scheduled as a task in the event loop."""
-        # default delay is a preposterous number, but my test setup is *very* high latency
+        # The default delay is an extremely conservative number. One of my test nodes has a horrific connection
+        # to the broker (high latency Internet + buggy network driver), and even this isn't high enough sometimes.
         await asyncio.sleep(delay)
         if not self.started:
             logging.warning(f"job {self.jid} did not start on node {self.target_node}")
