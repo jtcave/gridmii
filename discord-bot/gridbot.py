@@ -170,12 +170,13 @@ class Node:
             return None
 
     @classmethod
-    def node_seen(cls, node_name: str):
+    def node_seen(cls, node_name: str) -> Self:
         """Register the presence of the node with the given name, ensuring its presence in the table"""
         if node_name not in cls.table:
             cls.table[node_name] = cls(node_name)
         else:
             cls.table[node_name].touch()
+        return cls.table[node_name]
 
     @classmethod
     def node_gone(cls, node_name: str):
@@ -215,16 +216,40 @@ class GridMiiBot(Bot):
     def __init__(self, *, intents: discord.Intents):
         super().__init__(command_prefix='$', intents=intents)
         self.mqtt_task = None
+        self.after_broker_connect_task = None
+        self.broker_connected = asyncio.Event()
         self.target_channel: discord.TextChannel|None = None
         self.mq_client: aiomqtt.Client|None = None
         self.mq_sent = set()
+        self.can_announce = False
 
     async def setup_hook(self) -> None:
         # Install the MQTT task.
         self.mqtt_task = self.loop.create_task(self.do_mqtt_task())
-        # Attempt to resolve the target channel name
+        # Install the "after broker connection" task"
+        self.after_broker_connect_task = self.loop.create_task(self.after_broker_connect())
+
+    async def after_broker_connect(self):
+        # Wait for the event to fire
+        await self.broker_connected.wait()
+        # Wait for Discord for good measure
+        await self.wait_until_ready()
+        # Attempt to resolve the target channel name.
         if CHANNEL:
             self.target_channel = self.get_channel(CHANNEL)
+            if not self.target_channel:
+                logging.error(f"The target channel specified wasn't found. ID = {CHANNEL}")
+            else:
+                # Do setup things that need the target channel
+                logging.debug(f"Using #{self.target_channel} as the target channel")
+                # After waiting some time, allow "node connected" messages to happen
+                async def _allow_announce():
+                    await asyncio.sleep(5)
+                    self.can_announce = True
+                self.loop.create_task(_allow_announce())
+        else:
+            logging.warning("No target channel has been specified. Certain status messages won't be sent.")
+        await asyncio.sleep(5)
 
     async def do_mqtt_task(self):
         """Coroutine that sets up the MQTT client and processes inbound messages.
@@ -235,8 +260,8 @@ class GridMiiBot(Bot):
             tls_params = None
 
         await self.wait_until_ready()
-
         logging.info("Starting MQTT task")
+
         self.mq_client = aiomqtt.Client(BROKER, PORT,
                                         username=MQTT_USERNAME, password=MQTT_PASSWORD,
                                         tls_params=tls_params)
@@ -244,6 +269,7 @@ class GridMiiBot(Bot):
             try:
                 async with self.mq_client:
                     logging.info("Connected to MQTT broker, now subscribing")
+                    self.broker_connected.set()
                     # subscribe to our topics
                     for topic in ("job/#", "node/#"):
                         await self.mq_client.subscribe(topic)
@@ -254,6 +280,7 @@ class GridMiiBot(Bot):
                     async for msg in self.mq_client.messages:
                         await self.on_mqtt(msg)
             except aiomqtt.MqttError:
+                self.broker_connected.clear()
                 reconnect_delay = 3
                 logging.exception(f"Lost connection to broker. Retrying in {reconnect_delay} seconds")
                 await asyncio.sleep(reconnect_delay)
@@ -304,9 +331,20 @@ class GridMiiBot(Bot):
                 case "connect":
                     logging.info(f"node {node_name} is present")
                     Node.node_seen(node_name)
+                    await self.announce_node_seen(node_name)
                 case "disconnect":
                     logging.info(f"node {node_name} has left")
                     Node.node_gone(node_name)
+                    await self.announce_node_gone(node_name)
+    # end async def on_mqtt
+
+    async def announce_node_seen(self, node_name: str):
+        if self.can_announce:
+            await self.target_channel.send(f":inbox_tray: Node `{node_name}` is connected")
+
+    async def announce_node_gone(self, node_name: str):
+        if self.can_announce:
+            await self.target_channel.send(f":outbox_tray: Node `{node_name}` has disconnected")
 
 bot = GridMiiBot(intents=bot_intents)
 
@@ -361,9 +399,11 @@ async def nodes(ctx: Context):
     await ctx.message.reply(content=message)
 
 @bot.command()
-async def locus(ctx: Context, new_locus: str):
+async def locus(ctx: Context, new_locus: str|None=None):
     """Manually set the locus node for the $sh command"""
-    if new_locus in Node.table:
+    if new_locus is None:
+        await ctx.reply(f"Commands are being sent to {Node.locus}")
+    elif new_locus in Node.table:
         Node.locus = new_locus
         await ctx.reply(f":+1: Commands will now run on {new_locus}")
     else:
