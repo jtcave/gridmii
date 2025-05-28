@@ -118,7 +118,7 @@ class Job:
         """Called when the  job terminates, successfully or not"""
         # Decode the result code
         result_code = int(result)
-        content = disposition(result_code)
+        status = disposition(result_code)
         if self.will_attach:
             # Upload the output buffer as an attachment
             self.output_buffer.seek(0)
@@ -126,14 +126,14 @@ class Job:
             try:
                 await self.output_message.add_files(attachment)
             except discord.HTTPException as http_exc:
-                content += f"\n**Error attaching file:**\n```{str(http_exc)}```"
+                content = status + f"\n**Error attaching file:**\n```{str(http_exc)}```"
         else:
             # Stuff the output buffer into the reply message
             output = self.buffer_contents()
             if output and not output.isspace():
-                content += f"\n```\n{output}\n```"
+                content = f"\n```\n{output}\n```\n{status}"
             else:
-                content += "\n*The command had no output*"
+                content = status + "\n*The command had no output*"
             if len(content) > Job.MESSAGE_LIMIT:
                 # Edge case: the termination message would put the message over the limit
                 # In this case, set will_attach and backpedal.
