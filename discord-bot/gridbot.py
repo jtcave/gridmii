@@ -123,10 +123,11 @@ class Job:
             # Upload the output buffer as an attachment
             self.output_buffer.seek(0)
             attachment = discord.File(self.output_buffer, f"gridmii-output-{self.jid}.txt")
+            content = status
             try:
                 await self.output_message.add_files(attachment)
             except discord.HTTPException as http_exc:
-                content = status + f"\n**Error attaching file:**\n```{str(http_exc)}```"
+                content += f"\n**Error attaching file:**\n```{str(http_exc)}```"
         else:
             # Stuff the output buffer into the reply message
             output = self.buffer_contents()
