@@ -33,7 +33,7 @@ void do_mqtt_events() {
     else {
         pfd.events = POLLIN;
     }
-    int rv = poll(&pfd, 1, 4);
+    int rv = poll(&pfd, 1, DELAY_MS);
     if (rv == -1) {
         if (errno == EINTR || errno == EAGAIN) {
             // just try again later
