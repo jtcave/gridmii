@@ -219,10 +219,14 @@ class FlexBot(discord.ext.commands.Bot):
         if isinstance(exception, errors.CheckFailure):
             logging.debug("global command check failed")
         elif context.command is None:
-            try:
-                await self.flex_command(context)
-            except Exception as flex_exc:
-                logging.exception("exception in flex command function", exc_info=flex_exc)
+            # no command object means to run the flex command
+            if await self.can_run(context):
+                try:
+                    await self.flex_command(context)
+                except Exception as flex_exc:
+                    logging.exception("exception in flex command function", exc_info=flex_exc)
+            else:
+                logging.debug("global flex command check failed")
         else:
             await super().on_command_error(context, exception)
 
