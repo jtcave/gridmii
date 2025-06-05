@@ -218,8 +218,24 @@ class FlexBot(discord.ext.commands.Bot):
         # Swallow exceptions that are due to user error and are not supposed to be serious issues
         if isinstance(exception, errors.CheckFailure):
             logging.debug("global command check failed")
+        elif context.command is None:
+            try:
+                await self.flex_command(context)
+            except Exception as flex_exc:
+                logging.exception("exception in flex command function", exc_info=flex_exc)
         else:
             await super().on_command_error(context, exception)
+
+    async def invoke(self, ctx: Context[BotT], /) -> None:
+        try:
+            await super().invoke(ctx)
+        except errors.CommandNotFound:
+            await self.flex_command(ctx)
+
+    async def flex_command(self, ctx: Context[BotT], /):
+        """Run when a non-existent command is attempted"""
+        raise NotImplementedError("flex command not specified")
+
 
 
 class GridMiiBot(FlexBot):
@@ -358,6 +374,34 @@ class GridMiiBot(FlexBot):
         if self.can_announce:
             await self.target_channel.send(f":outbox_tray: Node `{node_name}` has disconnected")
 
+    async def submit_job(self, ctx: Context, command_string: str):
+        if bot.mq_client is None:
+            logging.error("bot.mq_client is None!")
+            await ctx.send("**internal error!**")
+            return
+
+        # pick a node
+        node = Node.pick_node()
+        if node is None:
+            await ctx.message.reply(":x: No nodes are available at the moment.")
+            return
+
+        # Post the reply that job output will go to
+        reply = await ctx.message.reply("Your job is starting...")
+
+        # Submit the job
+        try:
+            job = await node.submit_job(command_string, reply)
+            bot.loop.create_task(job.clean_if_unstarted())
+        except aiomqtt.exceptions.MqttError as ex_mq:
+            logging.exception("error publishing job submission")
+            await reply.edit(content=f"**Couldn't submit job**: {str(ex_mq)}")
+
+    async def flex_command(self, ctx: Context[BotT], /):
+        # chop off the command prefix
+        command_string = ctx.message.content[1:]
+        await self.submit_job(ctx, command_string)
+
 bot = GridMiiBot(intents=bot_intents)
 
 @bot.check
@@ -378,31 +422,8 @@ async def ping(ctx: Context):
 
 @bot.command(name="sh")
 async def start_job(ctx: Context, *command):
-    """Start a job, using the given text as the command"""
-    if bot.mq_client is None:
-        logging.error("bot.mq_client is None!")
-        await ctx.send("**internal error!**")
-        return
-
-    # pick a node
-    node = Node.pick_node()
-    if node is None:
-        await ctx.message.reply(":x: No nodes are available at the moment.")
-        return
-
-    # Format the command string to submit
-    command_string = ' '.join(command)
-
-    # Post the reply that job output will go to
-    reply = await ctx.message.reply("Your job is starting...")
-
-    # Submit the job
-    try:
-        job = await node.submit_job(command_string, reply)
-        bot.loop.create_task(job.clean_if_unstarted())
-    except aiomqtt.exceptions.MqttError as ex_mq:
-        logging.exception("error publishing job submission")
-        await reply.edit(content=f"**Couldn't submit job**: {str(ex_mq)}")
+    # TODO: rip this out
+    await ctx.reply("the $sh command is no longer available")
 
 @bot.command()
 async def nodes(ctx: Context):
