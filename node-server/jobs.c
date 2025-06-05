@@ -381,9 +381,8 @@ int submit_job(uint32_t job_id, write_callback on_write, const char *command) {
         // TODO: less draconian action on transient failures
         err(1, "could not create temp file for job script");
     }
-    int buf_len = strlen(command); // TODO: use strnlen to enforce a size cap?
-    // Writing a large script in one go might take too long and clog up the event loop.
-    // For now we just say this interface is for "a command."
+    // TODO: pass the string length to this function instead of using strlen
+    int buf_len = strnlen(command, JOB_SCRIPT_LIMIT);
     write(scriptfd, command, buf_len);
     write(scriptfd, "\n", 1);
     close(scriptfd);

@@ -22,6 +22,10 @@
 // max number of concurrent jobs
 #define MAX_JOBS 1
 
+// largest allowable job script
+// (n.b. 4000 characters is the Discord character cap if you have Nitro)
+#define JOB_SCRIPT_LIMIT 4000
+
 // temp file prefix
 #define TEMP_PREFIX "/tmp/gridmii-"
 #define TEMP_PATTERN TEMP_PREFIX "XXXXXX"

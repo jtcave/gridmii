@@ -74,9 +74,11 @@ void gm_route_message(const struct mosquitto_message *message) {
     init_topic_templates();
 
     // slurp payload out of message
-    char payload[256] = {0};
-    memset(payload, 0, 256);
-    int payload_size = (message->payloadlen > 255) ? 255 : message->payloadlen;
+    char payload[JOB_SCRIPT_LIMIT+1] = {0};
+    memset(payload, 0, JOB_SCRIPT_LIMIT+1);
+    int payload_size = (message->payloadlen >= JOB_SCRIPT_LIMIT)
+                            ? JOB_SCRIPT_LIMIT - 1
+                            : message->payloadlen;
     memcpy(payload, message->payload, payload_size);
     
     printf("message %d @ %s: %s\n", message->mid, message->topic, payload);
