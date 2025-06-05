@@ -1,6 +1,7 @@
 # output files
 *.o
 *.dSYM
+.DS_Store
 gm-node
 
 # vscode/jetbrains junk
