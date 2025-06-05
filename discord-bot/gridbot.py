@@ -5,8 +5,9 @@ import logging
 from typing import Self
 import discord
 import os
-from discord.ext.commands import Bot, Context
+from discord.ext.commands import Context, errors
 import aiomqtt
+from discord.ext.commands._types import BotT
 
 # load config file
 with open("config.json", 'r') as config_file:
@@ -211,7 +212,17 @@ class Node:
 bot_intents = discord.Intents.default()
 bot_intents.message_content = True
 
-class GridMiiBot(Bot):
+class FlexBot(discord.ext.commands.Bot):
+    """Adapts d.e.c.Bot to fit our use case better."""
+    async def on_command_error(self, context: Context[BotT], exception: errors.CommandError, /) -> None:
+        # Swallow exceptions that are due to user error and are not supposed to be serious issues
+        if isinstance(exception, errors.CheckFailure):
+            logging.debug("global command check failed")
+        else:
+            await super().on_command_error(context, exception)
+
+
+class GridMiiBot(FlexBot):
     """Discord client that accepts GridMii commands and processes MQTT messages"""
     # TODO: inherit from Client instead of Bot to allow for a more flexible input language
     def __init__(self, *, intents: discord.Intents):
