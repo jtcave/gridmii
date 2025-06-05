@@ -108,7 +108,7 @@ class Job:
         # TODO: escape the content so triple-backquotes don't wreck the output
         if not self.will_attach:
             # format the output message
-            content = f"Running...\n```\n{self.buffer_contents()}\n```"
+            content = f"Running...\n```ansi\n{self.buffer_contents()}\n```"
             if len(content) > Job.MESSAGE_LIMIT:
                 # turns out we will attach
                 self.will_attach = True
@@ -133,7 +133,7 @@ class Job:
             # Stuff the output buffer into the reply message
             output = self.buffer_contents()
             if output and not output.isspace():
-                content = f"\n```\n{output}\n```\n{status}"
+                content = f"\n```ansi\n{output}\n```\n{status}"
             else:
                 content = status + "\n*The command had no output*"
             if len(content) > Job.MESSAGE_LIMIT:
