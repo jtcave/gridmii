@@ -1,4 +1,4 @@
 #!/bin/sh
 . bin/activate
-python gridbot.py
+python -m gridbot
 

@@ -462,7 +462,3 @@ async def scram(ctx: Context):
         await ctx.message.reply(f"**Couldn't send scram request**: {str(ex_mq)}")
     else:
         await ctx.message.reply(":+1: wait for the jobs to complete")
-
-
-## startup ##
-bot.run(TOKEN, root_logger=True)
