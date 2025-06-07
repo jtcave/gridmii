@@ -1,26 +1,14 @@
 import asyncio
 import io
-import json
 import logging
 from typing import Self
-import discord
 import os
+import discord.ext.commands
 from discord.ext.commands import Context, errors
 import aiomqtt
 from discord.ext.commands._types import BotT
 
-# load config file
-with open("config.json", 'r') as config_file:
-    config = json.load(config_file)
-TOKEN = config['token']
-GUILD = discord.Object(id=config['guild'])
-CHANNEL = config.get("channel", None)
-BROKER = config["mqtt_broker"]
-PORT = config["mqtt_port"]
-MQTT_TLS = config.get("mqtt_tls", False)
-MQTT_USERNAME = config.get("mqtt_username", "")
-MQTT_PASSWORD = config.get("mqtt_password", "")
-TARGET_NODE = config.get("target_node", None)
+from .config import *
 
 ## job table ##
 
