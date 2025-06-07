@@ -47,7 +47,6 @@ class FlexBot(discord.ext.commands.Bot):
 
 class GridMiiBot(FlexBot):
     """Discord client that accepts GridMii commands and processes MQTT messages"""
-    # TODO: inherit from Client instead of Bot to allow for a more flexible input language
     def __init__(self, *, intents: discord.Intents):
         super().__init__(command_prefix='$', intents=intents)
         self.mqtt_task = None
