@@ -183,9 +183,13 @@ class Node:
         # stub for now
         return True
 
-    async def submit_job(self, command_string: str, output_message: discord.Message, mq_client: aiomqtt.Client) -> Job:
+    async def submit_job(self,
+                         command_string: str,
+                         output_message: discord.Message,
+                         mq_client: aiomqtt.Client,
+                         filter=None) -> Job:
         """Submit a job to the node"""
-        job = Job.new_job(output_message, self.node_name)
+        job = Job.new_job(output_message, self.node_name, filter)
         topic = f"{self.node_name}/submit/{job.jid}"
         logging.debug(f"publishing job {job.jid} to node...")
         await mq_client.publish(topic, payload=command_string)

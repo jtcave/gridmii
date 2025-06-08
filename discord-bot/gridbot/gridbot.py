@@ -7,7 +7,7 @@ from discord.ext.commands._types import BotT
 
 from .config import *
 from .entity import Job, Node
-
+from .output_filter import fastfetch_filter
 
 
 ## discord part ##
@@ -180,7 +180,7 @@ class GridMiiBot(FlexBot):
         if self.can_announce:
             await self.target_channel.send(f":outbox_tray: Node `{node_name}` has disconnected")
 
-    async def submit_job(self, ctx: Context, command_string: str):
+    async def submit_job(self, ctx: Context, command_string: str, filter=None):
         if bot.mq_client is None:
             logging.error("bot.mq_client is None!")
             await ctx.send("**internal error!**")
@@ -197,7 +197,7 @@ class GridMiiBot(FlexBot):
 
         # Submit the job
         try:
-            job = await node.submit_job(command_string, reply, self.mq_client)
+            job = await node.submit_job(command_string, reply, self.mq_client, filter)
             bot.loop.create_task(job.clean_if_unstarted())
         except aiomqtt.exceptions.MqttError as ex_mq:
             logging.exception("error publishing job submission")
@@ -264,3 +264,17 @@ async def scram(ctx: Context):
         await ctx.message.reply(f"**Couldn't send scram request**: {str(ex_mq)}")
     else:
         await ctx.message.reply(":+1: wait for the jobs to complete")
+
+# neofetch hack
+# this scr
+FETCH_SCRIPT = """
+fastfetch --pipe false -s none
+echo '===snip==='
+fastfetch --pipe false -l none -s 'Title:Separator:OS:Host:Kernel:Uptime:Packages:CPU:Memory:Swap:Disk:LocalIp:Locale:Break'
+"""
+assert len(FETCH_SCRIPT) < 2000     # discord message size
+
+@bot.command()
+async def neofetch(ctx: Context):
+    """Run fastfetch, then rearrange the output to look correct"""
+    await bot.submit_job(ctx, FETCH_SCRIPT, fastfetch_filter)
