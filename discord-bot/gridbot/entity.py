@@ -7,6 +7,7 @@ import aiomqtt
 import discord
 
 from .config import *
+from .output_filter import filter_backticks
 
 ## job table ##
 
@@ -41,26 +42,28 @@ class Job:
     # The bot is responsible for issuing JIDs. Keep track of the last JID issued.
     last_jid: int = 0
 
-    def __init__(self, jid: int, output_message: discord.Message, target_node_name: str):
+    def __init__(self, jid: int, output_message: discord.Message, target_node_name: str, filter=None):
         self.jid = jid
         self.output_buffer = io.BytesIO()
         self.output_message = output_message
         self.will_attach = False
         self.started = False
         self.target_node = target_node_name
+        self.filter = filter if filter else (lambda x: x)
 
     @classmethod
-    def new_job(cls, output_message: discord.Message, target_node_name: str) -> Self:
+    def new_job(cls, output_message: discord.Message, target_node_name: str, filter=filter_backticks) -> Self:
         """Create fresh job object tied to an output message"""
         cls.last_jid += 1
         jid = cls.last_jid
-        new_job_entry = cls(jid, output_message, target_node_name)
+        new_job_entry = cls(jid, output_message, target_node_name, filter)
         cls.table[jid] = new_job_entry
         return new_job_entry
 
     def buffer_contents(self) -> str:
         """Return the contents of the output buffer."""
-        return self.output_buffer.getvalue().decode(errors="replace")
+        contents = self.output_buffer.getvalue().decode(errors="replace")
+        return self.filter(contents)
 
     async def startup(self):
         """Called when the job has successfully started."""
