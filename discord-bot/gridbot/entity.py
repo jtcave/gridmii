@@ -35,7 +35,7 @@ class Job:
     table: dict[int, Self] = {}
 
     # TODO: find out how to get this magic number from Discord or discord.py
-    # TODO: check the attachment limit too
+    # TODO: kill the job if the stdout buffer gets too large
     MESSAGE_LIMIT = 2000    # assume no Nitro
 
     # The bot is responsible for issuing JIDs. Keep track of the last JID issued.
