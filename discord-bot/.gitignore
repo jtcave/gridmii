@@ -6,6 +6,7 @@ bin/*
 include/*
 lib/*
 pyvenv.cfg
+*.pyc
 
 # leave out the config file; it has keys
 config.json
