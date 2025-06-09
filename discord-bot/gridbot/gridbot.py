@@ -233,7 +233,7 @@ async def start_job(ctx: Context, *command):
 
 @bot.command()
 async def nodes(ctx: Context):
-    """Dump the node table"""
+    """View available nodes"""
     message = '\n'.join(f"* {n}" for n in Node.table) if Node.table else "No nodes are online"
     await ctx.message.reply(content=message)
 
@@ -264,6 +264,17 @@ async def scram(ctx: Context):
         await ctx.message.reply(f"**Couldn't send scram request**: {str(ex_mq)}")
     else:
         await ctx.message.reply(":+1: wait for the jobs to complete")
+
+@bot.command()
+async def jobs(ctx: Context):
+    """View running jobs"""
+    def _line(job: Job):
+        return f"* #{job.jid}, on `{job.target_node}`, see {job.output_message.jump_url}"
+    if Job.table:
+        table = '\n'.join(_line(j) for j in Job.table.values())
+    else:
+        table = "No jobs running"
+    await ctx.message.reply(table)
 
 # neofetch hack
 # this scr
