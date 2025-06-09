@@ -20,7 +20,7 @@
 #define SHELL_PATH "/bin/sh"
 
 // max number of concurrent jobs
-#define MAX_JOBS 1
+#define MAX_JOBS 4
 
 // largest allowable job script
 // (n.b. 4000 characters is the Discord character cap if you have Nitro)
