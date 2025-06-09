@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <sys/utsname.h>
 #include <poll.h>
+#include <unistd.h>
 
 #include <stdio.h>
 
@@ -20,13 +21,14 @@ void subscribe_topics(void);
 
 bool mqtt_initialized(void);
 void assert_mqtt_initialized(void);
+void attempt_reconnect(void);
 
 
-// TODO: a disconnection callback that reconnects and puts all the subscriptions back
 void has_connected(struct mosquitto *mosq, void *obj, int rc);
 void has_published(struct mosquitto *mosq, void *obj, int mid);
 void has_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *message);
 void has_subscribed(struct mosquitto *mosq, void *obj, int mid, int qos_count, const int *granted_qos);
+void has_disconnected(struct mosquitto *mosq, void *obj, int reason);
 
 // returhs false if MQTT hasn't been initialized - that is, if `gm_mosq` is still NULL;
 bool mqtt_initialized() {
@@ -65,6 +67,7 @@ struct mosquitto *gm_init_mqtt(void) {
     mosquitto_publish_callback_set(gm_mosq, has_published);
     mosquitto_subscribe_callback_set(gm_mosq, has_subscribed);
     mosquitto_message_callback_set(gm_mosq, has_message);
+    mosquitto_disconnect_callback_set(gm_mosq, has_disconnected);
 
     
     // declare last will of client
@@ -96,7 +99,7 @@ void gm_connect_mqtt() {
     const char *host = gm_config.grid_host;
     int port = gm_config.grid_port;
     printf("Connecting to broker %s:%d\n", host, port);
-    int rv = mosquitto_connect(gm_mosq, host, port, 60);
+    int rv = mosquitto_connect(gm_mosq, host, port, GRID_KEEPALIVE);
     if (rv == MOSQ_ERR_ERRNO) {
         err(1, "could not connect to broker");
     }
@@ -134,33 +137,43 @@ void gm_process_mqtt(short revents) {
 
     if (revents & (POLLERR | POLLHUP | POLLNVAL)) {
         warnx("mqtt socket died, revents = 0x%hx", revents);
-        //running = false;
+        attempt_reconnect();
     }
     if (revents & POLLIN) {
         rv = mosquitto_loop_read(gm_mosq, 1);
         if (rv == MOSQ_ERR_ERRNO) {
             err(1, "could not perform read ops");
         }
+        else if (rv == MOSQ_ERR_KEEPALIVE) {
+            // don't die, let the disconnect callback fire
+            warnx("keepalive exceeded");
+        }
         else if (rv != MOSQ_ERR_SUCCESS) {
-            errx(1, "could not perform read ops, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
+            errx(1, "read ops failed, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
         }
     }
     if (revents & POLLOUT) {
         rv = mosquitto_loop_write(gm_mosq, 1);
         if (rv == MOSQ_ERR_ERRNO) {
-            err(1, "could not perform read ops");
+            err(1, "could not perform write ops");
+        }
+        else if (rv == MOSQ_ERR_KEEPALIVE) {
+            warnx("keepalive exceeded");
         }
         else if (rv != MOSQ_ERR_SUCCESS) {
-            errx(1, "could not perform read ops, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
+            errx(1, "write ops failed, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
         }
     }
 
     rv = mosquitto_loop_misc(gm_mosq);
     if (rv == MOSQ_ERR_ERRNO) {
-        err(1, "could not perform read ops");
+        err(1, "could not perform misc ops");
+    }
+    else if (rv == MOSQ_ERR_KEEPALIVE) {
+        warnx("keepalive exceeded");
     }
     else if (rv != MOSQ_ERR_SUCCESS) {
-        errx(1, "could not perform read ops, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
+        errx(1, "misc ops failed, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
     }
 }
 
@@ -188,6 +201,43 @@ void has_subscribed(struct mosquitto *mosq, void *obj, int mid, int qos_count, c
 void has_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *message) {
     // punt to controller
     gm_route_message(message);
+}
+
+void has_disconnected(struct mosquitto *mosq, void *obj, int reason) {
+    printf("in reconnect callback, reason = %d\n", reason);
+    if (reason != 0) {
+        attempt_reconnect();
+    }
+    
+}
+
+// Reconnect to MQTT with exponential backoff
+#define MIN_DELAY 1
+#define MAX_DELAY 60
+
+// Try to reconnect
+void attempt_reconnect(void) {
+    int delay = MIN_DELAY;
+    int rv;
+    puts("Reconnecting to broker...");
+    while ((rv = mosquitto_reconnect(gm_mosq) != MOSQ_ERR_SUCCESS)) {
+        if (rv == MOSQ_ERR_ERRNO || rv == MOSQ_ERR_NOMEM) {
+            // TODO: actually look at errno
+            if (rv == MOSQ_ERR_ERRNO){
+                warn("could not reconnect");
+            }
+            else {
+                warnx("could not reconnect, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
+            }
+            printf("sleeping for %d secs and trying again\n", delay);
+            sleep(delay);
+            delay *= 2;
+            delay = delay > MAX_DELAY ? MAX_DELAY : delay;
+        }
+        else {
+            errx(1, "could not reconnect, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
+        }
+    }
 }
 
 // TODO: move these somewhere else
