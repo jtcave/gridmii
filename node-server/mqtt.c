@@ -110,6 +110,7 @@ void gm_connect_mqtt() {
     subscribe_topics();
 }
 
+// Subscribe to all topics relevant to a node.
 void subscribe_topics() {
     // buffer for topic string
     char topic_buf[512];
@@ -238,6 +239,8 @@ void attempt_reconnect(void) {
             errx(1, "could not reconnect, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
         }
     }
+
+    subscribe_topics();
 }
 
 // TODO: move these somewhere else
