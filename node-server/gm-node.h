@@ -13,6 +13,8 @@
 
 // configuration table struct
 struct gm_config_data {
+    int argc;                   // process argc
+    char *const *argv;           // process argv
     const char *grid_host;      // MQTT broker hostname
     int grid_port;              // MQTT broker port
     bool use_tls;               // whether using TLS for MQTT
@@ -49,8 +51,14 @@ void gm_announce(void);
 // revents - the `revents` field from the poll(2) call pertaining to the socket
 void gm_process_mqtt(short revents);
 
+// disconect from the broker, but don't exit
+void gm_disconnect(void);
+
 // disconnect from the broker and shut the server down
 void gm_shutdown(void);
+
+// reload the server from a newly installed binary
+void gm_reload(void);
 
 /// declarations - job table ///
 

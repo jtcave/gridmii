@@ -254,7 +254,7 @@ void gm_announce(void) {
 }
 
 // Disconnect from the broker and free resources
-void gm_shutdown() {
+void gm_disconnect() {
     // Send disconect message 
     int rv = mosquitto_publish(gm_mosq, NULL, "node/disconnect", strlen(gm_config.node_name), gm_config.node_name, 1, false);
     if (rv != MOSQ_ERR_SUCCESS) {
@@ -269,6 +269,10 @@ void gm_shutdown() {
     mosquitto_destroy(gm_mosq);
     gm_mosq = NULL;
     mosquitto_lib_cleanup();
+}
 
+// Disconnect from the broker, free resources, and exit
+void gm_shutdown() {
+    gm_disconnect();
     exit(0);
 }

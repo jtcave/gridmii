@@ -45,14 +45,15 @@ void gm_publish_job_status(int jid, const char *verb, const char *payload) {
  * acceptable level of nonsense.
  */
 
-#define N_TOPIC_HANDLERS 3
+#define N_TOPIC_HANDLERS 4
 #define MAX_TOPIC_TEMPLATE 256
 static char topic_patterns[N_TOPIC_HANDLERS][MAX_TOPIC_TEMPLATE];
 static bool topic_patterns_initialized = false;
 enum request_topics {
     TOPIC_SUBMIT_JOB = 0,
     TOPIC_SCRAM = 1,
-    TOPIC_EXIT = 2
+    TOPIC_EXIT = 2,
+    TOPIC_RELOAD = 3
 };
 
 // Prepare topic patterns
@@ -66,6 +67,9 @@ void init_topic_templates() {
         "%s/scram", node_name);
     snprintf(topic_patterns[TOPIC_EXIT], MAX_TOPIC_TEMPLATE,
         "%s/exit", node_name);
+    snprintf(topic_patterns[TOPIC_RELOAD], MAX_TOPIC_TEMPLATE,
+        "%s/reload", node_name);
+
     topic_patterns_initialized = true;
 }
 
@@ -106,6 +110,11 @@ void gm_route_message(const struct mosquitto_message *message) {
     // scram endpoint
     else if (strcmp(message->topic, topic_patterns[TOPIC_SCRAM]) == 0) {
         job_scram();
+    }
+
+    // reload endpoint
+    else if (strcmp(message->topic, topic_patterns[TOPIC_RELOAD]) == 0) {
+        gm_reload();
     }
 
     // exit endpoint

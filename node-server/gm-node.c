@@ -44,7 +44,10 @@ const char *default_node_name() {
 }
 
 // populate gm_config according to the environment
-void init_config() {
+void init_config(int argc, char *const *argv) {
+    gm_config.argc = argc;
+    gm_config.argv = argv;
+    
     char *env_host = getenv("GRID_HOST");
     gm_config.grid_host = (env_host ? env_host : GRID_HOST_DEFAULT);
     
@@ -111,6 +114,20 @@ void sigint_cleanup(int signum) {
     }
 }
 
+void gm_reload() {
+    // TODO: report error messages to job controller
+    fprintf(stderr, "gm_reload called\n");
+    if (jobs_running()) {
+	warnx("can't reload because jobs are running");
+    }
+    else {
+	gm_disconnect();
+	fprintf(stderr, "\n");
+	execvp(gm_config.argv[0], gm_config.argv);
+	err(1, "could not re-execvp node server");
+    }
+}
+
 int main(int argc, char *const *argv) {
     // install exit handler
     atexit(exit_cleanup);
@@ -127,7 +144,7 @@ int main(int argc, char *const *argv) {
     }
 
     // start up the subsystems and do an event loop
-    init_config();
+    init_config(argc, argv);
     init_job_table();
     gm_init_mqtt();
     gm_connect_mqtt();
