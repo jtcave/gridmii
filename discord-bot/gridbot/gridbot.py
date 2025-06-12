@@ -18,6 +18,9 @@ bot_intents.message_content = True
 
 class FlexBot(discord.ext.commands.Bot):
     """Adapts d.e.c.Bot to fit our use case better."""
+
+    # we want flex commands, we also want to swallow some exceptions
+
     async def on_command_error(self, context: Context[BotT], exception: errors.CommandError, /) -> None:
         # Swallow exceptions that are due to user error and are not supposed to be serious issues
         if isinstance(exception, errors.CheckFailure):
@@ -44,6 +47,36 @@ class FlexBot(discord.ext.commands.Bot):
         """Run when a non-existent command is attempted"""
         raise NotImplementedError("flex command not specified")
 
+    # flex replies
+    # TODO: we're subclassing on_message anyway, may as well roll our invoke override into it
+
+    async def on_message(self, message: Message, /) -> None:
+        if message.author.bot:
+            return
+        ctx = await self.get_context(message)
+        if message.type == discord.MessageType.reply and ctx.command is None:
+            # flex reply!
+            await self.flex_reply(ctx)
+        else:
+            await self.invoke(ctx)
+
+    async def flex_reply(self, ctx: Context, /):
+        raise NotImplementedError("flex reply not specified")
+
+
+def job_for_reply(ctx: Context) -> Job|None:
+    """Attempt to find a job based on what message the user is replying to.
+    Returns None if the job is gone or there was no job in the first place"""
+    msg = ctx.message
+    if msg.type != discord.MessageType.reply:
+        return None
+    replied_msg_id = msg.reference.message_id
+    # scan for messages
+    for job in Job.table.values():
+        if job.output_message.id == replied_msg_id:
+            return job
+    # no message
+    return None
 
 class GridMiiBot(FlexBot):
     """Discord client that accepts GridMii commands and processes MQTT messages"""
@@ -212,10 +245,18 @@ class GridMiiBot(FlexBot):
             logging.exception("error publishing job submission")
             await reply.edit(content=f"**Couldn't submit job**: {str(ex_mq)}")
 
+    async def stdin_post(self, ctx: Context):
+        logging.error("stdin post not yet implemented")
+
     async def flex_command(self, ctx: Context[BotT], /):
         # chop off the command prefix
         command_string = ctx.message.content[1:]
         await self.submit_job(ctx, command_string)
+
+    async def flex_reply(self, ctx: Context, /):
+        job = job_for_reply(ctx)
+        if job is not None:
+            await self.stdin_post(ctx)
 
 bot = GridMiiBot(intents=bot_intents)
 
@@ -313,20 +354,6 @@ async def neofetch(ctx: Context):
     await bot.submit_job(ctx, FETCH_SCRIPT, fastfetch_filter)
 
 # commands to interact with a running job
-
-def job_for_reply(ctx: Context) -> Job|None:
-    """Attempt to find a job based on what message the user is replying to.
-    Returns None if the job is gone or there was no job in the first place"""
-    msg = ctx.message
-    if msg.type != discord.MessageType.reply:
-        return None
-    replied_msg_id = msg.reference.message_id
-    # scan for messages
-    for job in Job.table.values():
-        if job.output_message.id == replied_msg_id:
-            return job
-    # no message
-    return None
 
 @bot.command()
 async def jobinfo(ctx: Context):
