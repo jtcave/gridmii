@@ -135,6 +135,9 @@ class Job:
         self.output_buffer.close()
         del Job.table[self.jid]
 
+    def __repr__(self):
+        return f"<Job: jid=#{self.jid} node='{self.target_node}'>"
+
 ## Node table ##
 class Node:
     """Represents a node in the grid"""

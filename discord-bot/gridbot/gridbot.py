@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import discord.ext.commands
+from discord import Message
 from discord.ext.commands import Context, errors
 import aiomqtt
 from discord.ext.commands._types import BotT
@@ -42,7 +43,6 @@ class FlexBot(discord.ext.commands.Bot):
     async def flex_command(self, ctx: Context[BotT], /):
         """Run when a non-existent command is attempted"""
         raise NotImplementedError("flex command not specified")
-
 
 
 class GridMiiBot(FlexBot):
@@ -311,3 +311,26 @@ assert len(FETCH_SCRIPT) < 2000     # discord message size
 async def neofetch(ctx: Context):
     """Run fastfetch, then rearrange the output to look correct"""
     await bot.submit_job(ctx, FETCH_SCRIPT, fastfetch_filter)
+
+# commands to interact with a running job
+
+def job_for_reply(ctx: Context) -> Job|None:
+    """Attempt to find a job based on what message the user is replying to.
+    Returns None if the job is gone or there was no job in the first place"""
+    msg = ctx.message
+    if msg.type != discord.MessageType.reply:
+        return None
+    replied_msg_id = msg.reference.message_id
+    # scan for messages
+    for job in Job.table.values():
+        if job.output_message.id == replied_msg_id:
+            return job
+    # no message
+    return None
+
+@bot.command()
+async def jobinfo(ctx: Context):
+    """Report information about a given job, which is specified by replying to the job"""
+    job = job_for_reply(ctx)
+    if job is not None:
+        await ctx.reply(repr(job))
