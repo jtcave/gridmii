@@ -359,9 +359,9 @@ void kill_job(struct job *jobspec) {
 
 // Terminate all jobs
 void job_scram() {
-    // Killing the pgroup would be sufficient to clean the job table
+    // Killing the pgroup should be sufficient to clean the job table
     // as the processes dying would eventually close stdio and trigger waitpid
-    fprintf(stderr, "scram invoked");
+    fprintf(stderr, "scram invoked\n");
     for (int i = 0; i < MAX_JOBS; i++) {
         struct job *jobspec = &job_table[i];
         if (job_active(jobspec)) {
