@@ -109,4 +109,7 @@ void gm_route_message(const struct mosquitto_message *message);
 // publish a job status update message for the given job
 void gm_publish_job_status(int jid, const char *verb, const char *payload);
 
+// publish a node announcement message not tied to any job in particular
+void gm_publish_node_announce(const char *text);
+
 #endif

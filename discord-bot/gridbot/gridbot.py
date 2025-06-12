@@ -160,16 +160,20 @@ class GridMiiBot(FlexBot):
 
         elif topic_path[0] == "node" and len(topic_path) == 2:
             # node status update
-            node_name = msg.payload.decode()
+            payload = msg.payload.decode()
             match topic_path[1]:
                 case "connect":
-                    logging.info(f"node {node_name} is present")
-                    Node.node_seen(node_name)
-                    await self.announce_node_seen(node_name)
+                    logging.info(f"node {payload} is present")
+                    Node.node_seen(payload)
+                    await self.announce_node_seen(payload)
                 case "disconnect":
-                    logging.info(f"node {node_name} has left")
-                    Node.node_gone(node_name)
-                    await self.announce_node_gone(node_name)
+                    logging.info(f"node {payload} has left")
+                    Node.node_gone(payload)
+                    await self.announce_node_gone(payload)
+                case "announce":
+                    logging.info(f"node announcement: {payload}")
+                    await self.announce_string(payload)
+
     # end async def on_mqtt
 
     async def announce_node_seen(self, node_name: str):
@@ -179,6 +183,11 @@ class GridMiiBot(FlexBot):
     async def announce_node_gone(self, node_name: str):
         if self.can_announce:
             await self.target_channel.send(f":outbox_tray: Node `{node_name}` has disconnected")
+
+    async def announce_string(self, payload: str):
+        # don't respect self.can_announce
+        # these kinds of announcements aren't directly caused by us starting up
+        await self.target_channel.send(f":mega: `{payload}`")
 
     async def submit_job(self, ctx: Context, command_string: str, filter=None):
         if bot.mq_client is None:
@@ -276,8 +285,21 @@ async def jobs(ctx: Context):
         table = "No jobs running"
     await ctx.message.reply(table)
 
+@bot.command()
+async def reload(ctx: Context, node_name:str|None=None):
+    """Instruct a node to reload its server (useful for updates)"""
+    if node_name is None:
+        await ctx.reply(f"`node_name` parameter required\nfor example: `$reload {Node.locus}`?")
+        return
+    node = Node.table.get(node_name, None)
+    if node is None:
+        await ctx.reply(f"node {node_name} is not in the node table")
+    else:
+        await node.reload(bot.mq_client)
+    # no need to send an ack reply because the node should induce connect/disconnect
+
+
 # neofetch hack
-# this scr
 FETCH_SCRIPT = """
 fastfetch --pipe false -s none
 echo '===snip==='

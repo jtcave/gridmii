@@ -33,6 +33,13 @@ void gm_publish_job_status(int jid, const char *verb, const char *payload) {
     mosquitto_publish(gm_mosq, NULL, topic_buf, strlen(payload), payload, 2, false);
 }
 
+void gm_publish_node_announce(const char *text) {
+    char payload[512];
+    snprintf(payload, sizeof(payload), "%s: %s", gm_config.node_name, text);
+    mosquitto_publish(gm_mosq, NULL, "node/announce", strlen(payload), payload, 2, false);
+    fprintf(stderr, "announcement: %s\n", payload);
+}
+
 // topic router
 
 /* Adding a new node topic requires:

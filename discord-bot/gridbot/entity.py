@@ -196,5 +196,10 @@ class Node:
         logging.debug(f"job {job.jid} published")
         return job
 
+    async def reload(self, mq_client: aiomqtt.Client):
+        """Instruct the node to reload its node server"""
+        topic = f"{self.node_name}/reload"
+        await mq_client.publish(topic)
+
     def __str__(self):
         return self.node_name

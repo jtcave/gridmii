@@ -115,16 +115,15 @@ void sigint_cleanup(int signum) {
 }
 
 void gm_reload() {
-    // TODO: report error messages to job controller
     fprintf(stderr, "gm_reload called\n");
     if (jobs_running()) {
-	warnx("can't reload because jobs are running");
+        gm_publish_node_announce("The node server cannot be reloaded because there are active jobs");
     }
     else {
-	gm_disconnect();
-	fprintf(stderr, "\n");
-	execvp(gm_config.argv[0], gm_config.argv);
-	err(1, "could not re-execvp node server");
+        gm_disconnect();
+        fprintf(stderr, "\n");
+        execvp(gm_config.argv[0], gm_config.argv);
+        err(1, "could not re-execvp node server");
     }
 }
 
