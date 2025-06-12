@@ -139,8 +139,15 @@ int main(int argc, char *const *argv) {
     sa.sa_mask = sa_set;
     sa.sa_flags = 0;
     if (sigaction(SIGINT, &sa, NULL) != 0) {
-        err(1, "could not set signal handler");
+        err(1, "could not set SIGINT handler");
     }
+
+    // ignore SIGPIPE
+    sa.sa_handler = SIG_IGN;
+    if (sigaction(SIGPIPE, &sa, NULL) != 0) {
+        err(1, "could not ignore SIGPIPE");
+    }
+
 
     // start up the subsystems and do an event loop
     init_config(argc, argv);

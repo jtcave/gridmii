@@ -113,11 +113,6 @@ int spawn_job(struct job *jobspec, uint32_t job_id, write_callback on_write, cha
     if (rv == -1) {
         err(1, "could not fcntl F_SETFL");
     }
-    // we do NOT want to receive SIGPIPE
-    rv = fcntl(stdin_pipe[1], F_SETNOSIGPIPE, 1);
-    if (rv == -1) {
-        err(1, "could not fcntl F_SETNOSIGPIPE");
-    }
 
     // flush stdio before forking
     fflush(stdout);
