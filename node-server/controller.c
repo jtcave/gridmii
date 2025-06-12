@@ -52,15 +52,17 @@ void gm_publish_node_announce(const char *text) {
  * acceptable level of nonsense.
  */
 
-#define N_TOPIC_HANDLERS 4
+#define N_TOPIC_HANDLERS 6
 #define MAX_TOPIC_TEMPLATE 256
 static char topic_patterns[N_TOPIC_HANDLERS][MAX_TOPIC_TEMPLATE];
 static bool topic_patterns_initialized = false;
 enum request_topics {
     TOPIC_SUBMIT_JOB = 0,
-    TOPIC_SCRAM = 1,
-    TOPIC_EXIT = 2,
-    TOPIC_RELOAD = 3
+    TOPIC_STDIN_JOB = 1,
+    TOPIC_EOF_JOB = 2,
+    TOPIC_SCRAM = 3,
+    TOPIC_EXIT = 4,
+    TOPIC_RELOAD = 5
 };
 
 // Prepare topic patterns
@@ -70,6 +72,10 @@ void init_topic_templates() {
     const char *node_name = gm_config.node_name;
     snprintf(topic_patterns[TOPIC_SUBMIT_JOB], MAX_TOPIC_TEMPLATE,
         "%s/submit/%%ud", node_name);
+    snprintf(topic_patterns[TOPIC_STDIN_JOB], MAX_TOPIC_TEMPLATE,
+        "%s/stdin/%%ud", node_name);
+    snprintf(topic_patterns[TOPIC_EOF_JOB], MAX_TOPIC_TEMPLATE,
+        "%s/eof/%%ud", node_name);
     snprintf(topic_patterns[TOPIC_SCRAM], MAX_TOPIC_TEMPLATE,
         "%s/scram", node_name);
     snprintf(topic_patterns[TOPIC_EXIT], MAX_TOPIC_TEMPLATE,
@@ -111,6 +117,28 @@ void gm_route_message(const struct mosquitto_message *message) {
         else {
             fprintf(stderr, "couldn't start job: %s\n", strerror(rv));
             gm_publish_job_status(jid, "reject", strerror(rv));
+        }
+    }
+
+    // stdin endpoint
+    else if (sscanf(message->topic, topic_patterns[TOPIC_STDIN_JOB], &jid) > 0) {
+        int rv = job_stdin_write(jid, message->payload, message->payloadlen);
+        // TODO: report stdin write error on a more appropriate channel
+        if (rv != 0) {
+            char err_buf[128];
+            snprintf(err_buf, sizeof(err_buf), "error writing to job stdin: %s", strerror(rv));
+            gm_publish_node_announce(err_buf);
+        }
+    }
+
+    // stdin EOF endpoint
+    else if (sscanf(message->topic, topic_patterns[TOPIC_EOF_JOB], &jid) > 0) {
+        int rv = job_stdin_eof(jid);
+        // TODO: report stdin errors on a more appropriate channel
+        if (rv != 0) {
+            char err_buf[128];
+            snprintf(err_buf, sizeof(err_buf), "error closing job stdin: %s", strerror(rv));
+            gm_publish_node_announce(err_buf);
         }
     }
 

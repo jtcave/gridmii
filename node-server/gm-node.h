@@ -85,7 +85,13 @@ struct job {
 void init_job_table(void);
 
 // Submit a job by providing a shell command
-int submit_job(uint32_t job_id, write_callback on_write, const char *command);
+int submit_job(uint32_t jid, write_callback on_write, const char *command);
+
+// write to job stdin
+int job_stdin_write(uint32_t jid, const char *data, size_t len);
+
+// close job stdin
+int job_stdin_eof(uint32_t jid);
 
 // returns whether jobs are running
 bool jobs_running(void);

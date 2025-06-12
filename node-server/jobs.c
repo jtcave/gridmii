@@ -10,6 +10,7 @@
 #include <err.h>
 #include <string.h>
 #include <stdlib.h>
+#include <fcntl.h>
 
 #include "gm-node.h"
 
@@ -73,6 +74,8 @@ void init_job_table() {
 
 // Start a job, including the process it monitors
 int spawn_job(struct job *jobspec, uint32_t job_id, write_callback on_write, char *const *argv) {
+    int rv;
+
     // initialize the jobspec
     init_job(jobspec);
     jobspec->job_id = job_id;
@@ -103,11 +106,18 @@ int spawn_job(struct job *jobspec, uint32_t job_id, write_callback on_write, cha
     if (pipe(stdin_pipe) != 0) {
         err(1, "could not create pipe for stdin");
     }
-    //jobspec->job_stdin = stdin_pipe[1];
+    jobspec->job_stdin = stdin_pipe[1];
     
-    // TODO: hook the write side of stdin pipe to the jobspec/event loop
-    // for now we just widow the pipe so the subprocess sees EOF
-    close(stdin_pipe[1]);
+    // we do NOT want to block when writing to the job's stdin
+    rv = fcntl(stdin_pipe[1], F_SETFL, O_NONBLOCK);
+    if (rv == -1) {
+        err(1, "could not fcntl F_SETFL");
+    }
+    // we do NOT want to receive SIGPIPE
+    rv = fcntl(stdin_pipe[1], F_SETNOSIGPIPE, 1);
+    if (rv == -1) {
+        err(1, "could not fcntl F_SETNOSIGPIPE");
+    }
 
     // flush stdio before forking
     fflush(stdout);
@@ -147,6 +157,11 @@ int spawn_job(struct job *jobspec, uint32_t job_id, write_callback on_write, cha
         }
         // From now on, stderr goes to the parent and the user will see our
         // error messages.
+
+        // Close the other ends of the pipe.
+        close(stdin_pipe[1]);
+        close(stdout_pipe[0]);
+        close(stderr_pipe[0]);
 
         // Next, we enter a new session, detaching from the terminal.
         if (setsid() == -1) {
@@ -188,7 +203,7 @@ int spawn_job(struct job *jobspec, uint32_t job_id, write_callback on_write, cha
         // in parent process
         jobspec->job_pid = child_pid;
         jobspec->running = true;
-        // Orphan the pipes in the parent parent process
+        // Orphan the pipes in the parent process
         // This ensures the pipes will deliver EOF when the subprocess exits
         close(stdout_pipe[1]);
         close(stderr_pipe[1]);
@@ -325,6 +340,17 @@ struct job *empty_job_slot() {
     return NULL;
 }
 
+// find job with given jid
+struct job *job_with_jid(uint32_t jid) {
+    for (int i = 0; i < MAX_JOBS; i++) {
+        struct job *jobspec = &job_table[i];
+        if (jobspec->job_id == jid && job_active(jobspec)) {
+            return jobspec;
+        }
+    }
+    return NULL;
+}
+
 // returns whether jobs are running
 bool jobs_running() {
     for (int i = 0; i < MAX_JOBS; i++) {
@@ -372,7 +398,7 @@ void job_scram() {
 }
 
 // Submit a job by providing a shell command
-int submit_job(uint32_t job_id, write_callback on_write, const char *command) {
+int submit_job(uint32_t jid, write_callback on_write, const char *command) {
     // First, put the command in a temporary file to be used as a shell script.
     char path[20];
     memcpy(path, TEMP_PATTERN, 20);
@@ -394,11 +420,53 @@ int submit_job(uint32_t job_id, write_callback on_write, const char *command) {
         // TODO: sensible error return for "no job slots available"
         return EUSERS;
     }
-    int spawn_code = spawn_job(jobspec, job_id, on_write, argv);
-    fprintf(stderr, "spawn_job() for jid %d returned %d\n", job_id, spawn_code);
+    int spawn_code = spawn_job(jobspec, jid, on_write, argv);
+    fprintf(stderr, "spawn_job() for jid %d returned %d\n", jid, spawn_code);
 
     // clean up
     //usleep(DELAY_MS);
     //unlink(path);
     return spawn_code;
+}
+
+int job_stdin_write(uint32_t jid, const char *data, size_t len) {
+    struct job *jobspec = job_with_jid(jid);
+    if (jobspec == NULL) {
+        return ESRCH;
+    }
+    int fd = jobspec->job_stdin;
+    if (fd == -1) {
+        return EBADF;
+    }
+    int rv = write(fd, data, len);
+    if (rv == -1) {
+        return errno;
+    }
+    else if (rv < len) {
+        // short write, not good
+        // since we don't have a write-later buffer, just pretend it was 100% blocked
+        return EAGAIN;  // this is what fully blocked writes will do
+    }
+    else {
+        return 0;
+    }
+}
+
+int job_stdin_eof(uint32_t jid) {
+    struct job *jobspec = job_with_jid(jid);
+    if (jobspec == NULL) {
+        return ESRCH;
+    }
+    int fd = jobspec->job_stdin;
+    if (fd == -1) {
+        return EBADF;
+    }
+    int rv = close(jobspec->job_stdin);
+    if (rv == -1) {
+        return errno;
+    }
+    else {
+        jobspec->job_stdin = -1;
+        return 0;
+    }
 }

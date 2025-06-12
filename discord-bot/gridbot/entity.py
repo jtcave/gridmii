@@ -104,6 +104,16 @@ class Job:
                 content = "Running...\n*Output will be attached to this message when the job completes*"
             await self.output_message.edit(content=content)
 
+    async def stdin(self, data: bytes, mq_client: aiomqtt.Client):
+        """Send data to the job's standard input"""
+        topic = f"{self.target_node}/stdin/{self.jid}"
+        await mq_client.publish(topic, data, qos=2)
+
+    async def eof(self, mq_client: aiomqtt.Client):
+        """Close the job's standard input"""
+        topic = f"{self.target_node}/eof/{self.jid}"
+        await mq_client.publish(topic, qos=2)
+
     async def stopped(self, result: bytes):
         """Called when the  job terminates, successfully or not"""
         # Decode the result code

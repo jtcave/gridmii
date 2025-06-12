@@ -245,8 +245,18 @@ class GridMiiBot(FlexBot):
             logging.exception("error publishing job submission")
             await reply.edit(content=f"**Couldn't submit job**: {str(ex_mq)}")
 
-    async def stdin_post(self, ctx: Context):
-        logging.error("stdin post not yet implemented")
+    async def stdin_post(self, ctx: Context, job: Job):
+        body = ctx.message.content
+        body += '\n'
+        try:
+            payload = body.encode()
+        except UnicodeEncodeError as uee:
+            # I can't see how this can even happen, but complain about it anyway
+            logging.exception("user message couldn't be encoded")
+            await ctx.reply(":x: Internal error encoding your stdin")
+            return
+        await job.stdin(payload, self.mq_client)
+
 
     async def flex_command(self, ctx: Context[BotT], /):
         # chop off the command prefix
@@ -256,7 +266,7 @@ class GridMiiBot(FlexBot):
     async def flex_reply(self, ctx: Context, /):
         job = job_for_reply(ctx)
         if job is not None:
-            await self.stdin_post(ctx)
+            await self.stdin_post(ctx, job)
 
 bot = GridMiiBot(intents=bot_intents)
 
@@ -361,3 +371,11 @@ async def jobinfo(ctx: Context):
     job = job_for_reply(ctx)
     if job is not None:
         await ctx.reply(repr(job))
+
+@bot.command()
+async def eof(ctx: Context):
+    """Send end-of-file to a job's stdin"""
+    job = job_for_reply(ctx)
+    if job is not None:
+        # 04 is ASCII for Ctrl-D
+        await job.eof(bot.mq_client)
