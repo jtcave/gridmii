@@ -279,6 +279,11 @@ void check_job_subprocess(struct job *jobspec) {
             jobspec->job_pid = 0;
             // store wait status
             jobspec->exit_stat = stat;
+            // close stdin
+            if (jobspec->job_stdin != -1) {
+                close(jobspec->job_stdin);
+                jobspec->job_stdin = -1;
+            }
         }
     }
 }
@@ -462,6 +467,40 @@ int job_stdin_eof(uint32_t jid) {
     }
     else {
         jobspec->job_stdin = -1;
+        return 0;
+    }
+}
+
+int job_signal(uint32_t jid, int signum) {
+    struct job *jobspec = job_with_jid(jid);
+    if (jobspec == NULL) {
+        return ESRCH;
+    }
+    pid_t job_pid = jobspec->job_pid;
+    if (job_pid == 0) {
+        return ESRCH;
+    }
+    else if (job_pid == -1) {
+        // we do not want to send a broadcast message
+        warnx("job %ud has pid -1", jid);
+        return EDOM;    // "numerical argument out of range"
+                        // not a possible kill(2) error
+    }
+    
+    // if the user is sending SIGKILL, they presumably want to nuke the entire job
+    // if it's another signal, they probably just want to signal the process leader
+    int rv;
+    if (signum == SIGKILL) {
+        rv = killpg(job_pid, signum);
+    }
+    else {
+        rv = kill(job_pid, signum);
+    }
+    
+    if (rv == -1) {
+        return errno;
+    }
+    else {
         return 0;
     }
 }

@@ -61,6 +61,7 @@ void gm_shutdown(void);
 void gm_reload(void);
 
 /// declarations - job table ///
+// TODO: typedef uint32_t jid_t;
 
 // forward declare `struct job` because we need it as a paraneter for callbacks, which are
 // members of the struct
@@ -92,6 +93,9 @@ int job_stdin_write(uint32_t jid, const char *data, size_t len);
 
 // close job stdin
 int job_stdin_eof(uint32_t jid);
+
+// send signal to job
+int job_signal(uint32_t jid, int signum);
 
 // returns whether jobs are running
 bool jobs_running(void);

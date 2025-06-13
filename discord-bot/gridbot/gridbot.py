@@ -377,5 +377,22 @@ async def eof(ctx: Context):
     """Send end-of-file to a job's stdin"""
     job = job_for_reply(ctx)
     if job is not None:
-        # 04 is ASCII for Ctrl-D
         await job.eof(bot.mq_client)
+
+@bot.command()
+async def signal(ctx: Context, signal_num: int):
+    """Send a signal (numeric code) to a job"""
+    job = job_for_reply(ctx)
+    if job is not None:
+        await job.signal(signal_num, bot.mq_client)
+        await ctx.reply(f"Sent signal {signal_num} to the job")
+
+@bot.command()
+async def kill(ctx: Context):
+    """Send SIGKILL to a job"""
+    await signal(ctx, 9)    # SIGKILL is 9 on all platforms I can see
+
+@bot.command(name="ctrl-c")
+async def ctrlc(ctx: Context):
+    """Send SIGINT to a job, like pressing Ctrl-C"""
+    await signal(ctx, 2)    # SIGINT is 2 on all platforms I can see

@@ -52,7 +52,7 @@ void gm_publish_node_announce(const char *text) {
  * acceptable level of nonsense.
  */
 
-#define N_TOPIC_HANDLERS 6
+#define N_TOPIC_HANDLERS 7
 #define MAX_TOPIC_TEMPLATE 256
 static char topic_patterns[N_TOPIC_HANDLERS][MAX_TOPIC_TEMPLATE];
 static bool topic_patterns_initialized = false;
@@ -60,9 +60,10 @@ enum request_topics {
     TOPIC_SUBMIT_JOB = 0,
     TOPIC_STDIN_JOB = 1,
     TOPIC_EOF_JOB = 2,
-    TOPIC_SCRAM = 3,
-    TOPIC_EXIT = 4,
-    TOPIC_RELOAD = 5
+    TOPIC_SIGNAL_JOB = 3,
+    TOPIC_SCRAM = 4,
+    TOPIC_EXIT = 5,
+    TOPIC_RELOAD = 6
 };
 
 // Prepare topic patterns
@@ -76,6 +77,8 @@ void init_topic_templates() {
         "%s/stdin/%%ud", node_name);
     snprintf(topic_patterns[TOPIC_EOF_JOB], MAX_TOPIC_TEMPLATE,
         "%s/eof/%%ud", node_name);
+    snprintf(topic_patterns[TOPIC_SIGNAL_JOB], MAX_TOPIC_TEMPLATE,
+        "%s/signal/%%ud/%%d", node_name);
     snprintf(topic_patterns[TOPIC_SCRAM], MAX_TOPIC_TEMPLATE,
         "%s/scram", node_name);
     snprintf(topic_patterns[TOPIC_EXIT], MAX_TOPIC_TEMPLATE,
@@ -100,10 +103,12 @@ void gm_route_message(const struct mosquitto_message *message) {
     
     printf("message %d @ %s: %s\n", message->mid, message->topic, payload);
 
-    // start matching topic patterns:
+    // start matching topic patterns
+    uint32_t jid;
+    int signum;
 
     // submit job endpoint
-    uint32_t jid;
+
     if (sscanf(message->topic, topic_patterns[TOPIC_SUBMIT_JOB], &jid) > 0) {
         if (jid == 0) {
             // sender doesn't care what the JID is, so make one up
@@ -138,6 +143,17 @@ void gm_route_message(const struct mosquitto_message *message) {
         if (rv != 0) {
             char err_buf[128];
             snprintf(err_buf, sizeof(err_buf), "error closing job stdin: %s", strerror(rv));
+            gm_publish_node_announce(err_buf);
+        }
+    }
+
+    // signal endpoint
+    else if (sscanf(message->topic, topic_patterns[TOPIC_SIGNAL_JOB], &jid, &signum) > 0) {
+        int rv = job_signal(jid, signum);
+        // TODO: report job manip errors on a more appropriate channel
+        if (rv != 0) {
+            char err_buf[128];
+            snprintf(err_buf, sizeof(err_buf), "error signalling job: %s", strerror(rv));
             gm_publish_node_announce(err_buf);
         }
     }

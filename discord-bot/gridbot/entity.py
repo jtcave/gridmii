@@ -114,6 +114,12 @@ class Job:
         topic = f"{self.target_node}/eof/{self.jid}"
         await mq_client.publish(topic, qos=2)
 
+    async def signal(self, signal_num: int, mq_client: aiomqtt.Client):
+        """Send a signal to the job"""
+        logging.info(f"sending signal {signal_num} to job {self.jid}")
+        topic = f"{self.target_node}/signal/{self.jid}/{signal_num}"
+        await mq_client.publish(topic, qos=2)
+
     async def stopped(self, result: bytes):
         """Called when the  job terminates, successfully or not"""
         # Decode the result code
