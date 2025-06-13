@@ -472,6 +472,7 @@ int job_stdin_eof(uint32_t jid) {
 }
 
 int job_signal(uint32_t jid, int signum) {
+    fprintf(stderr, "sending signal %d to job %u\n", signum, jid);
     struct job *jobspec = job_with_jid(jid);
     if (jobspec == NULL) {
         return ESRCH;
@@ -487,15 +488,10 @@ int job_signal(uint32_t jid, int signum) {
                         // not a possible kill(2) error
     }
     
-    // if the user is sending SIGKILL, they presumably want to nuke the entire job
-    // if it's another signal, they probably just want to signal the process leader
+    // send the signal to the whole process group
+    // sending SIGINT to just the shell doesn't seem to work
     int rv;
-    if (signum == SIGKILL) {
-        rv = killpg(job_pid, signum);
-    }
-    else {
-        rv = kill(job_pid, signum);
-    }
+    rv = killpg(job_pid, signum);
     
     if (rv == -1) {
         return errno;

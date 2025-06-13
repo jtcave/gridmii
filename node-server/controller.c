@@ -72,13 +72,13 @@ void init_topic_templates() {
 
     const char *node_name = gm_config.node_name;
     snprintf(topic_patterns[TOPIC_SUBMIT_JOB], MAX_TOPIC_TEMPLATE,
-        "%s/submit/%%ud", node_name);
+        "%s/submit/%%u", node_name);
     snprintf(topic_patterns[TOPIC_STDIN_JOB], MAX_TOPIC_TEMPLATE,
-        "%s/stdin/%%ud", node_name);
+        "%s/stdin/%%u", node_name);
     snprintf(topic_patterns[TOPIC_EOF_JOB], MAX_TOPIC_TEMPLATE,
-        "%s/eof/%%ud", node_name);
+        "%s/eof/%%u", node_name);
     snprintf(topic_patterns[TOPIC_SIGNAL_JOB], MAX_TOPIC_TEMPLATE,
-        "%s/signal/%%ud/%%d", node_name);
+        "%s/signal/%%u/%%d", node_name);
     snprintf(topic_patterns[TOPIC_SCRAM], MAX_TOPIC_TEMPLATE,
         "%s/scram", node_name);
     snprintf(topic_patterns[TOPIC_EXIT], MAX_TOPIC_TEMPLATE,
@@ -104,8 +104,8 @@ void gm_route_message(const struct mosquitto_message *message) {
     printf("message %d @ %s: %s\n", message->mid, message->topic, payload);
 
     // start matching topic patterns
-    uint32_t jid;
-    int signum;
+    uint32_t jid = 0;
+    int signum = 0;
 
     // submit job endpoint
 
