@@ -142,39 +142,20 @@ void gm_process_mqtt(short revents) {
     }
     if (revents & POLLIN) {
         rv = mosquitto_loop_read(gm_mosq, 1);
-        if (rv == MOSQ_ERR_ERRNO) {
-            err(1, "could not perform read ops");
-        }
-        else if (rv == MOSQ_ERR_KEEPALIVE) {
-            // don't die, let the disconnect callback fire
-            warnx("keepalive exceeded");
-        }
-        else if (rv != MOSQ_ERR_SUCCESS) {
-            errx(1, "read ops failed, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
+        if (rv != MOSQ_ERR_SUCCESS) {
+            warnx("read ops failed, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
         }
     }
     if (revents & POLLOUT) {
         rv = mosquitto_loop_write(gm_mosq, 1);
-        if (rv == MOSQ_ERR_ERRNO) {
-            err(1, "could not perform write ops");
-        }
-        else if (rv == MOSQ_ERR_KEEPALIVE) {
-            warnx("keepalive exceeded");
-        }
-        else if (rv != MOSQ_ERR_SUCCESS) {
-            errx(1, "write ops failed, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
+        if (rv != MOSQ_ERR_SUCCESS) {
+            warnx("write ops failed, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
         }
     }
 
     rv = mosquitto_loop_misc(gm_mosq);
-    if (rv == MOSQ_ERR_ERRNO) {
-        err(1, "could not perform misc ops");
-    }
-    else if (rv == MOSQ_ERR_KEEPALIVE) {
-        warnx("keepalive exceeded");
-    }
-    else if (rv != MOSQ_ERR_SUCCESS) {
-        errx(1, "misc ops failed, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
+    if (rv != MOSQ_ERR_SUCCESS) {
+        warnx("misc ops failed, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
     }
 }
 
