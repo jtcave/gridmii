@@ -11,3 +11,9 @@ export GRID_PORT=1883
 
 ## By default, jobs will start in the user's home directory. Set GRID_JOB_CWD to override this.
 # export GRID_JOB_CWD=/mnt/gridmii
+
+## Specify the shell to run jobs with
+## By default, /bin/sh is used.
+# export GRID_SHELL=/bin/bash
+## This option can also be used to relay jobs to a container or VM
+# export GRID_JOB_SHELL=${PWD}/dinghy.sh    # sample container relay script

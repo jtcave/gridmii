@@ -414,7 +414,7 @@ int submit_job(uint32_t jid, write_callback on_write, const char *command) {
     close(scriptfd);
 
     // build argv and start the job
-    char *argv[] = {SHELL_PATH, path, NULL};
+    char *argv[] = {(char*)gm_config.job_shell, path, NULL};
     struct job *jobspec = empty_job_slot();
     if (jobspec == NULL) {
         // TODO: sensible error return for "no job slots available"

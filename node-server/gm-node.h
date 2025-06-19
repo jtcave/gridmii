@@ -14,7 +14,7 @@
 // configuration table struct
 struct gm_config_data {
     int argc;                   // process argc
-    char *const *argv;           // process argv
+    char *const *argv;          // process argv
     const char *grid_host;      // MQTT broker hostname
     int grid_port;              // MQTT broker port
     bool use_tls;               // whether using TLS for MQTT
@@ -22,6 +22,7 @@ struct gm_config_data {
     const char *grid_password;  // MQTT password
     const char *node_name;      // name of node in the grid
     const char *job_cwd;        // starting directory for jobs
+    const char *job_shell;      // shell used to run job script
 };
 
 // global configuration table

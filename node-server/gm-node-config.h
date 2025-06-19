@@ -19,9 +19,6 @@
 // used as a millisecond delay value in poll(), etc.
 #define DELAY_MS 100
 
-// shell used to run job scripts
-#define SHELL_PATH "/bin/sh"
-
 // max number of concurrent jobs
 #define MAX_JOBS 4
 

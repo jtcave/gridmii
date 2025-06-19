@@ -71,6 +71,9 @@ void init_config(int argc, char *const *argv) {
     gm_config.job_cwd = (env_job_cwd ? env_job_cwd :
         (env_home ? env_home :
             "/"));
+    
+    char *env_job_shell = getenv("GRID_JOB_SHELL");
+    gm_config.job_shell = env_job_shell ? env_job_shell : "/bin/sh";
 
     // dump the config for debugging
     puts("Your configuration:");
@@ -81,6 +84,7 @@ void init_config(int argc, char *const *argv) {
     printf("GRID_PASSWORD=%s\n", gm_config.grid_password ? "(set)" : "(not set)");
     printf("NODE_NAME=%s\n", gm_config.node_name);
     printf("GRID_JOB_CWD=%s\n", gm_config.job_cwd);
+    printf("GRID_JOB_SHELL=%s\n", gm_config.job_shell);
     puts("");
 
     // do some sanity checking
