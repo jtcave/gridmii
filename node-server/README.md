@@ -68,7 +68,7 @@ brew install mosquitto
 
 You may wish to isolate jobs from the host in a container, a chroot, or some other isolation mechanism. You can set the `GRID_JOB_SHELL` environment variable to a script or program that forwards the job into the containment area.
 
-As an example, the `dinghy.sh` script will run a job in a systemd container named `gridmii-container` by copying the job script into the container and running it.
+As an example, the `contain.sh` script will run a job in a systemd container named `gridmii-container` by copying the job script into the container and running it.
 
 ***TODO: instructions on setting up systemd containers***
 
