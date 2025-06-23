@@ -158,6 +158,7 @@ int main(int argc, char *const *argv) {
     gm_init_mqtt();
     gm_connect_mqtt();
     for(;;) {
-        gm_do_events();
+        do_mqtt_events();
+        do_job_events();
     }
 }

@@ -47,10 +47,8 @@ void gm_connect_mqtt(void);
 // Announce the node's existence to the grid
 void gm_announce(void);
 
-// Process MQTT events. This is to be called by the main event loop after polling the socket.
-// mosq - a mosquitto object
-// revents - the `revents` field from the poll(2) call pertaining to the socket
-void gm_process_mqtt(short revents);
+// pump one cycle of the mosquitto message loop
+void do_mqtt_events(void);
 
 // disconect from the broker, but don't exit
 void gm_disconnect(void);
@@ -106,11 +104,6 @@ void do_job_events(void);
 
 // Terminate all jobs
 void job_scram(void);
-
-/// declarations - event loop ///
-
-// body of event loop
-void gm_do_events(void);
 
 /// declarations - message response controller
 

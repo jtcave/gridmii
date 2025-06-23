@@ -23,7 +23,7 @@ bool mqtt_initialized(void);
 void assert_mqtt_initialized(void);
 void attempt_reconnect(void);
 
-
+// mosquitto callbacks that we set
 void has_connected(struct mosquitto *mosq, void *obj, int rc);
 void has_published(struct mosquitto *mosq, void *obj, int mid);
 void has_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *message);
@@ -130,7 +130,7 @@ void subscribe_topics() {
     }
 }
 
-
+// Process MQTT events. This is to be called by the main event loop after polling the socket.
 void gm_process_mqtt(short revents) {
     // process events for mqtt socket
     // TODO: make the error handling more robust and less repetitive
@@ -224,6 +224,37 @@ void attempt_reconnect(void) {
 }
 
 // TODO: move these somewhere else
+
+// pump one cycle of the mosquitto message loop
+void do_mqtt_events() {
+    int fd = mosquitto_socket(gm_mosq);
+    if (fd == -1) {
+        err(1, "could not get socket from mosquitto object");
+    }
+
+    struct pollfd pfd;
+    pfd.fd = fd;
+    pfd.events = POLLIN;
+
+    // only poll for write if there's something that needs written
+    if (mosquitto_want_write(gm_mosq)) {
+        pfd.events = POLLIN | POLLOUT;
+    }
+    else {
+        pfd.events = POLLIN;
+    }
+    int rv = poll(&pfd, 1, DELAY_MS);
+    if (rv == -1) {
+        if (errno == EINTR || errno == EAGAIN) {
+            // just try again later
+            return;
+        }
+        else {
+            err(1, "could not poll()");
+        }
+    }
+    gm_process_mqtt(pfd.revents);
+}
 
 // Announce the node's existence to the grid
 void gm_announce(void) {

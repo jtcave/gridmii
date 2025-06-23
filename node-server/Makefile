@@ -13,7 +13,7 @@ ifeq "$(OSNAME)" "NetBSD"
 endif
 
 HEADERS = gm-node.h gm-node-config.h
-MODULES = mqtt.c jobs.c eventloop.c controller.c gm-node.c
+MODULES = mqtt.c jobs.c controller.c gm-node.c
 
 all: gm-node
 
