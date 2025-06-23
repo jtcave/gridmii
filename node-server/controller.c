@@ -104,7 +104,7 @@ void gm_route_message(const struct mosquitto_message *message) {
     printf("message %d @ %s: %s\n", message->mid, message->topic, payload);
 
     // start matching topic patterns
-    uint32_t jid = 0;
+    jid_t jid = 0;
     int signum = 0;
 
     // submit job endpoint
@@ -112,7 +112,7 @@ void gm_route_message(const struct mosquitto_message *message) {
     if (sscanf(message->topic, topic_patterns[TOPIC_SUBMIT_JOB], &jid) > 0) {
         if (jid == 0) {
             // sender doesn't care what the JID is, so make one up
-            static uint32_t jid_counter = 777;
+            static jid_t jid_counter = 777;
             jid = jid_counter++;
         }
         int rv = submit_job(jid, on_stdout_mqtt, payload);

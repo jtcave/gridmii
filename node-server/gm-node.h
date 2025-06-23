@@ -62,7 +62,7 @@ void gm_shutdown(void);
 void gm_reload(void);
 
 /// declarations - job table ///
-// TODO: typedef uint32_t jid_t;
+typedef uint32_t jid_t;
 
 // forward declare `struct job` because we need it as a paraneter for callbacks, which are
 // members of the struct
@@ -73,7 +73,7 @@ typedef void (*write_callback)(struct job *jobspec, int source_fd, char *buffer,
 
 // job table entry
 struct job {
-    uint32_t job_id;    // global job identifier, issued by cluster manager
+    jid_t job_id;    // global job identifier, issued by cluster manager
     pid_t job_pid;      // local pid, used to address actual child process
     int job_stdin;
     int job_stdout;
@@ -87,16 +87,16 @@ struct job {
 void init_job_table(void);
 
 // Submit a job by providing a shell command
-int submit_job(uint32_t jid, write_callback on_write, const char *command);
+int submit_job(jid_t jid, write_callback on_write, const char *command);
 
 // write to job stdin
-int job_stdin_write(uint32_t jid, const char *data, size_t len);
+int job_stdin_write(jid_t jid, const char *data, size_t len);
 
 // close job stdin
-int job_stdin_eof(uint32_t jid);
+int job_stdin_eof(jid_t jid);
 
 // send signal to job
-int job_signal(uint32_t jid, int signum);
+int job_signal(jid_t jid, int signum);
 
 // returns whether jobs are running
 bool jobs_running(void);

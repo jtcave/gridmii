@@ -73,7 +73,7 @@ void init_job_table() {
 }
 
 // Start a job, including the process it monitors
-int spawn_job(struct job *jobspec, uint32_t job_id, write_callback on_write, char *const *argv) {
+int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write, char *const *argv) {
     int rv;
 
     // initialize the jobspec
@@ -340,7 +340,7 @@ struct job *empty_job_slot() {
 }
 
 // find job with given jid
-struct job *job_with_jid(uint32_t jid) {
+struct job *job_with_jid(jid_t jid) {
     for (int i = 0; i < MAX_JOBS; i++) {
         struct job *jobspec = &job_table[i];
         if (jobspec->job_id == jid && job_active(jobspec)) {
@@ -397,7 +397,7 @@ void job_scram() {
 }
 
 // Submit a job by providing a shell command
-int submit_job(uint32_t jid, write_callback on_write, const char *command) {
+int submit_job(jid_t jid, write_callback on_write, const char *command) {
     // First, put the command in a temporary file to be used as a shell script.
     char path[20];
     memcpy(path, TEMP_PATTERN, 20);
@@ -428,7 +428,7 @@ int submit_job(uint32_t jid, write_callback on_write, const char *command) {
     return spawn_code;
 }
 
-int job_stdin_write(uint32_t jid, const char *data, size_t len) {
+int job_stdin_write(jid_t jid, const char *data, size_t len) {
     struct job *jobspec = job_with_jid(jid);
     if (jobspec == NULL) {
         return ESRCH;
@@ -451,7 +451,7 @@ int job_stdin_write(uint32_t jid, const char *data, size_t len) {
     }
 }
 
-int job_stdin_eof(uint32_t jid) {
+int job_stdin_eof(jid_t jid) {
     struct job *jobspec = job_with_jid(jid);
     if (jobspec == NULL) {
         return ESRCH;
@@ -470,7 +470,7 @@ int job_stdin_eof(uint32_t jid) {
     }
 }
 
-int job_signal(uint32_t jid, int signum) {
+int job_signal(jid_t jid, int signum) {
     fprintf(stderr, "sending signal %d to job %u\n", signum, jid);
     struct job *jobspec = job_with_jid(jid);
     if (jobspec == NULL) {
