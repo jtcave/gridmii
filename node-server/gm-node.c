@@ -106,7 +106,6 @@ void exit_cleanup(void) {
     system("rm -f " TEMP_PREFIX "*");
 }
 
-// TODO: actually wire this up
 void sigint_cleanup(int signum) {
     if (signum == SIGINT) {
         fprintf(stderr, "\nshutting down due to SIGINT...\n");

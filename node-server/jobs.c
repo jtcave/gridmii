@@ -248,7 +248,6 @@ void poll_job_output(struct job *jobspec) {
     }
     else if (ready > 0) {
         // we might be able to do some reads, check our fds
-        // TODO: do we need to do non-blocking reads with pipes?
         // TODO: less draconian read error handling
 
         for (int i = 0; i <= 1; i++) {

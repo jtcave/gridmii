@@ -204,7 +204,6 @@ void attempt_reconnect(void) {
     puts("Reconnecting to broker...");
     while ((rv = mosquitto_reconnect(gm_mosq) != MOSQ_ERR_SUCCESS)) {
         if (rv == MOSQ_ERR_ERRNO || rv == MOSQ_ERR_NOMEM) {
-            // TODO: actually look at errno
             if (rv == MOSQ_ERR_ERRNO){
                 warn("could not reconnect");
             }
