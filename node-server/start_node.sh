@@ -4,6 +4,12 @@ NODE_BIN="gm-node"
 CONFIG_FILE="gm-node.conf"
 CERT_FILE="gridmii.crt"
 
+# first argument can specify the config file
+if [ "z$1" != "z" ]
+then
+    CONFIG_FILE="$1"
+fi
+
 if [ ! -r "$CONFIG_FILE" ]
 then
     echo "Can't find config file \`$CONFIG_FILE\`. Make sure it exists and can be read by this user." >&2
@@ -14,6 +20,7 @@ then
     echo 'Try running `make` or `gmake`.'
     exit 1
 else
+    echo "Loading config file: $CONFIG_FILE"
     . ./$CONFIG_FILE
     # demand a cert only if TLS is set 
     if [ ! -r "$CERT_FILE" -a -n "$GRID_TLS" ]
