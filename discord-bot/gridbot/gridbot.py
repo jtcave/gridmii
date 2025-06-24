@@ -396,3 +396,17 @@ async def kill(ctx: Context):
 async def ctrlc(ctx: Context):
     """Send SIGINT to a job, like pressing Ctrl-C"""
     await signal(ctx, 2)    # SIGINT is 2 on all platforms I can see
+
+@bot.command()
+async def jobtail(ctx: Context, lines:int=5):
+    """Show the last few lines of a job's output"""
+    job = job_for_reply(ctx)
+    if job is not None:
+        # add 1 to `lines` because there's probably a blank line at the end, and the user won't be counting that
+        buffer_tail = '\n'.join(job.tail(lines+1))
+        # TODO: escape output
+        output = f"```ansi\n{buffer_tail}\n```"
+        if len(output) > 2000:
+            # Ideally we'd
+            output = f"***Output too large***\nThe message would have been {len(output)} characters long, but only 2000 are allowed"
+        await ctx.reply(output)

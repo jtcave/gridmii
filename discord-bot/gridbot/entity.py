@@ -151,6 +151,11 @@ class Job:
         self.output_buffer.close()
         del Job.table[self.jid]
 
+    def tail(self, lines: int) -> list[str]:
+        """Return the last few lines of job output"""
+        buffer_lines = self.buffer_contents().split('\n')
+        return buffer_lines[-lines:]
+
     def __repr__(self):
         return f"<Job: jid=#{self.jid} node='{self.target_node}'>"
 
