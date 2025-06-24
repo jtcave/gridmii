@@ -286,11 +286,6 @@ async def ping(ctx: Context):
     else:
         await ctx.reply(":+1:")
 
-@bot.command(name="sh")
-async def start_job(ctx: Context, *command):
-    # TODO: rip this out
-    await ctx.reply("the $sh command is no longer available")
-
 @bot.command()
 async def nodes(ctx: Context):
     """View available nodes"""
@@ -299,7 +294,7 @@ async def nodes(ctx: Context):
 
 @bot.command()
 async def locus(ctx: Context, new_locus: str|None=None):
-    """Manually set the locus node for the $sh command"""
+    """Manually set the locus node for new jobs"""
 
     if new_locus is None:
         if Node.locus is None:
