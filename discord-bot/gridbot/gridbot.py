@@ -316,6 +316,13 @@ class UserCommandCog(commands.Cog, name="User Commands"):
 class AdminCommandCog(commands.Cog, name="Admin Commands"):
     """Cog for commands only admins can use"""
 
+    async def cog_check(self, ctx: Context) -> bool:
+        user_roles = [r.id for r in ctx.author.roles]
+        for admin_role in ADMIN_ROLES:
+            if admin_role in user_roles:
+                return True
+        return False
+
     @commands.command()
     async def scram(self, ctx: Context):
         """Terminate all jobs across the entire grid"""

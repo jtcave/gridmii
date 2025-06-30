@@ -7,6 +7,7 @@ with open("config.json", 'r') as config_file:
 TOKEN = config['token']
 GUILD = discord.Object(id=config['guild'])
 CHANNEL = config.get("channel", None)
+ADMIN_ROLES = config.get("admin_roles", [])
 BROKER = config["mqtt_broker"]
 PORT = config["mqtt_port"]
 MQTT_TLS = config.get("mqtt_tls", False)
