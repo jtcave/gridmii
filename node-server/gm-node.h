@@ -1,5 +1,4 @@
 // gm-node.h - global declarations for gridmii node server
-// TODO: consistent prefix and naming for the global interfaces
 
 #include <sys/types.h>
 #include <mosquitto.h>
@@ -34,7 +33,6 @@ extern bool gm_in_child;
 /// declarations - mqtt ///
 
 // global mosquitto object
-// TODO: if we have this, then do we need all these `struct mosquitto *` params everywhere?
 extern struct mosquitto *gm_mosq;
 
 // Initialize and configure a mosquitto object

@@ -91,27 +91,34 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write, char *
     jobspec->on_write = on_write;
 
     // create pipes for child stdio
-    // TODO: handle errors more gracefully
     int stdin_pipe[2], stdout_pipe[2], stderr_pipe[2];
     if (pipe(stdout_pipe) != 0) {
-        err(1, "could not create pipe for stdout");
+        rv = errno;
+        warn("could not create pipe for stdout");
+        return rv;
     }
     jobspec->job_stdout = stdout_pipe[0];
 
     if (pipe(stderr_pipe) != 0) {
-        err(1, "could not create pipe for stdout");
+        rv = errno;
+        warn("could not create pipe for stdout");
+        return rv;
     }
     jobspec->job_stderr = stderr_pipe[0];
 
     if (pipe(stdin_pipe) != 0) {
-        err(1, "could not create pipe for stdin");
+        rv = errno;
+        warn("could not create pipe for stdin");
+        return rv;
     }
     jobspec->job_stdin = stdin_pipe[1];
     
     // we do NOT want to block when writing to the job's stdin
     rv = fcntl(stdin_pipe[1], F_SETFL, O_NONBLOCK);
     if (rv == -1) {
-        err(1, "could not fcntl F_SETFL");
+        rv = errno;
+        warn("could not fcntl F_SETFL");
+        return rv;
     }
 
     // flush stdio before forking
@@ -165,18 +172,10 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write, char *
 
         // chdir to our new working directory
         if (chdir(gm_config.job_cwd) == -1) {
-            // TODO: should this be an error?
-            // Shouldn't we also at least stat() the putative job_cwd first?
-            // The node operator needs a chance to fix it before putting a
-            // busted node in the grid.
-            err(SPAWN_FAILURE, "could not chdir to node's GRID_JOB_CWD");
+            err(SPAWN_FAILURE, "could not chdir to node's GRID_JOB_CWD %s", gm_config.job_cwd);
         }
 
-        // TODO: build an environment for the subprocess instead of just slurping up the host's
-        //       (this is an awful dirty hack for development purposes)
-        extern char **environ;
-
-        // scrub the environment
+        // the new process will inherit a scrubbed version of our environment
         // TODO: this really should be an allowlist instead of a denylist
         const char *env_key = envs_to_scrub[0];
         int i = 0;
@@ -189,6 +188,7 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write, char *
         }
 
         // exec the new process
+        extern char **environ;
         execve(argv[0], argv, environ);
         
         // exec failed, break the bad news
@@ -259,18 +259,16 @@ void poll_job_output(struct job *jobspec) {
     }
     else if (ready > 0) {
         // we might be able to do some reads, check our fds
-        // TODO: less draconian read error handling
 
         for (int i = 0; i <= 1; i++) {
             if (polls[i].revents & (POLLIN|POLLHUP)) {
                 read_count = read(polls[i].fd, buffer, BUFFER_SIZE);
                 if (read_count == -1) {
-                    err(1, "error reading from job pipe");
+                    warn("error reading from job pipe");
                 }
                 jobspec->on_write(jobspec, polls[i].fd, buffer, read_count);
                 if (read_count == 0) {
                     // EOF
-                    //printf("\nclosing fd %d\n", polls[i].fd);
                     close_job_fd(jobspec, polls[i].fd);
                 }
             }
@@ -415,10 +413,10 @@ int submit_job(jid_t jid, write_callback on_write, const char *command) {
     memcpy(path, TEMP_PATTERN, TEMP_NAME_SIZE);
     int scriptfd = mkstemp(path);
     if (scriptfd == -1) {
-        // TODO: less draconian action on transient failures
-        err(1, "could not create temp file for job script");
+        int rv = errno;
+        warn("could not create temp file for job script");
+        return rv;
     }
-    // TODO: pass the string length to this function instead of using strlen
     int buf_len = strnlen(command, JOB_SCRIPT_LIMIT);
     write(scriptfd, command, buf_len);
     write(scriptfd, "\n", 1);
@@ -428,7 +426,7 @@ int submit_job(jid_t jid, write_callback on_write, const char *command) {
     char *argv[] = {(char*)gm_config.job_shell, path, NULL};
     struct job *jobspec = empty_job_slot();
     if (jobspec == NULL) {
-        // TODO: sensible error return for "no job slots available"
+        // this seems to be a semi-reasonable error return for "no job slots available"
         return EUSERS;
     }
     // stash path to script

@@ -71,7 +71,6 @@ struct mosquitto *gm_init_mqtt(void) {
 
     
     // declare last will of client
-    // TODO: currently it just writes the client name to the `disconnect` topic - is that ideal? 
     rv = mosquitto_will_set(gm_mosq, "node/disconnect", strlen(client_name), client_name, 1, false);
     if (rv != MOSQ_ERR_SUCCESS) {
         errx(1, "could not set last will, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
@@ -133,10 +132,10 @@ void subscribe_topics() {
 // Process MQTT events. This is to be called by the main event loop after polling the socket.
 void gm_process_mqtt(short revents) {
     // process events for mqtt socket
-    // TODO: make the error handling more robust and less repetitive
     int rv;
 
     if (revents & (POLLERR | POLLHUP | POLLNVAL)) {
+        // socket broke, put it back
         warnx("mqtt socket died, revents = 0x%hx", revents);
         attempt_reconnect();
     }
@@ -222,8 +221,6 @@ void attempt_reconnect(void) {
 
     subscribe_topics();
 }
-
-// TODO: move these somewhere else
 
 // pump one cycle of the mosquitto message loop
 void do_mqtt_events() {
