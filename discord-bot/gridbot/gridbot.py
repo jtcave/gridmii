@@ -211,7 +211,7 @@ class GridMiiBot(FlexBot):
         # these kinds of announcements aren't directly caused by us starting up
         await self.target_channel.send(f":mega: `{payload}`")
 
-    async def submit_job(self, ctx: Context, command_string: str, filter=None):
+    async def submit_job(self, ctx: Context, command_string: str, output_filter=None):
         if bot.mq_client is None:
             logging.error("bot.mq_client is None!")
             await ctx.send("**internal error!**")
@@ -228,7 +228,7 @@ class GridMiiBot(FlexBot):
 
         # Submit the job
         try:
-            job = await node.submit_job(command_string, reply, self.mq_client, filter)
+            job = await node.submit_job(command_string, reply, self.mq_client, output_filter)
             bot.loop.create_task(job.clean_if_unstarted())
         except aiomqtt.exceptions.MqttError as ex_mq:
             logging.exception("error publishing job submission")
@@ -239,7 +239,7 @@ class GridMiiBot(FlexBot):
         body += '\n'
         try:
             payload = body.encode()
-        except UnicodeEncodeError as uee:
+        except UnicodeEncodeError:
             # I can't see how this can even happen, but complain about it anyway
             logging.exception("user message couldn't be encoded")
             await ctx.reply(":x: Internal error encoding your stdin")

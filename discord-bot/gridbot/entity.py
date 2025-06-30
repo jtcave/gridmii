@@ -42,21 +42,21 @@ class Job:
     # The bot is responsible for issuing JIDs. Keep track of the last JID issued.
     last_jid: int = 0
 
-    def __init__(self, jid: int, output_message: discord.Message, target_node_name: str, filter=None):
+    def __init__(self, jid: int, output_message: discord.Message, target_node_name: str, output_filter=None):
         self.jid = jid
         self.output_buffer = io.BytesIO()
         self.output_message = output_message
         self.will_attach = False
         self.started = False
         self.target_node = target_node_name
-        self.filter = filter if filter else (lambda x: x)
+        self.filter = filter if output_filter else (lambda x: x)
 
     @classmethod
-    def new_job(cls, output_message: discord.Message, target_node_name: str, filter=filter_backticks) -> Self:
+    def new_job(cls, output_message: discord.Message, target_node_name: str, output_filter=filter_backticks) -> Self:
         """Create fresh job object tied to an output message"""
         cls.last_jid += 1
         jid = cls.last_jid
-        new_job_entry = cls(jid, output_message, target_node_name, filter)
+        new_job_entry = cls(jid, output_message, target_node_name, output_filter)
         cls.table[jid] = new_job_entry
         return new_job_entry
 
@@ -211,9 +211,9 @@ class Node:
                          command_string: str,
                          output_message: discord.Message,
                          mq_client: aiomqtt.Client,
-                         filter=None) -> Job:
+                         output_filter=None) -> Job:
         """Submit a job to the node"""
-        job = Job.new_job(output_message, self.node_name, filter)
+        job = Job.new_job(output_message, self.node_name, output_filter)
         topic = f"{self.node_name}/submit/{job.jid}"
         logging.debug(f"publishing job {job.jid} to node...")
         await mq_client.publish(topic, payload=command_string)
