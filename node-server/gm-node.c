@@ -98,11 +98,8 @@ void exit_cleanup(void) {
     // Don't do anything if this is one of the child processes
     if (gm_in_child) return;
 
-    // clean up job scripts
-    // TODO: this is a horrendous hack
-    // at the very least, it should be done when a job exits and no jobs
-    // remain, not at exit
-    puts("rm -f " TEMP_PREFIX "*");     // to remind the world of my sins
+    // clean up any stale job scripts that might be lying around
+    puts("rm -f " TEMP_PREFIX "*");
     system("rm -f " TEMP_PREFIX "*");
 }
 

@@ -64,6 +64,7 @@ void init_job(struct job *jobspec) {
     jobspec->running = false;
     jobspec->exit_stat = 0;
     jobspec->on_write = on_write_nothing;
+    memset(jobspec->temp_path, 0, TEMP_NAME_SIZE);
 }
 
 void init_job_table() {
@@ -76,19 +77,18 @@ void init_job_table() {
 int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write, char *const *argv) {
     int rv;
 
-    // initialize the jobspec
-    init_job(jobspec);
-    jobspec->job_id = job_id;
+    // reject null callback
     if (on_write == NULL) {
-        // won't take NULL as a callback
         return EFAULT;
     }
-    jobspec->on_write = on_write;
 
-    // no null argv
+    // reject null argv and empty argv
     if (argv == NULL || *argv == NULL) {
         return EFAULT;
     }
+
+    jobspec->job_id = job_id;
+    jobspec->on_write = on_write;
 
     // create pipes for child stdio
     // TODO: handle errors more gracefully
@@ -225,6 +225,17 @@ void close_job_fd(struct job *jobspec, int fd) {
     close(fd);
 }
 
+// clean up a job's temp file
+void job_rm_temp(struct job *jobspec) {
+    if (jobspec->temp_path[0] != '\0') {
+        fprintf(stderr, "unlinking %s\n", jobspec->temp_path);
+        int rv = unlink(jobspec->temp_path);
+        if (rv == -1) {
+            warn("could not unlink %s", jobspec->temp_path);
+        }
+    }
+}
+
 // Monitor job output
 void poll_job_output(struct job *jobspec) {
     // buffer for reads
@@ -304,6 +315,7 @@ void collect_job(struct job *jobspec) {
         char payload[16];
         snprintf(payload, sizeof(payload), "%d", jobspec->exit_stat);
         gm_publish_job_status(jobspec->job_id, "stopped", payload);
+        job_rm_temp(jobspec);
     }
 }
 
@@ -399,8 +411,8 @@ void job_scram() {
 // Submit a job by providing a shell command
 int submit_job(jid_t jid, write_callback on_write, const char *command) {
     // First, put the command in a temporary file to be used as a shell script.
-    char path[20];
-    memcpy(path, TEMP_PATTERN, 20);
+    char path[TEMP_NAME_SIZE];
+    memcpy(path, TEMP_PATTERN, TEMP_NAME_SIZE);
     int scriptfd = mkstemp(path);
     if (scriptfd == -1) {
         // TODO: less draconian action on transient failures
@@ -419,12 +431,15 @@ int submit_job(jid_t jid, write_callback on_write, const char *command) {
         // TODO: sensible error return for "no job slots available"
         return EUSERS;
     }
+    // stash path to script
+    memcpy(jobspec->temp_path, path, TEMP_NAME_SIZE);
+    
+    // actually launch the job
     int spawn_code = spawn_job(jobspec, jid, on_write, argv);
     fprintf(stderr, "spawn_job() for jid %d returned %d\n", jid, spawn_code);
-
-    // clean up
-    //usleep(DELAY_MS);
-    //unlink(path);
+    if (spawn_code != 0) {
+        job_rm_temp(jobspec);
+    }
     return spawn_code;
 }
 

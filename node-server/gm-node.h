@@ -71,14 +71,15 @@ typedef void (*write_callback)(struct job *jobspec, int source_fd, char *buffer,
 
 // job table entry
 struct job {
-    jid_t job_id;    // global job identifier, issued by cluster manager
-    pid_t job_pid;      // local pid, used to address actual child process
-    int job_stdin;
-    int job_stdout;
-    int job_stderr;
-    bool running;
-    int exit_stat;
-    write_callback on_write;
+    jid_t job_id;                   // global job ID issued by grid controller
+    pid_t job_pid;                  // process (group) id of the job subprocess
+    int job_stdin;                  // fd for job stdin
+    int job_stdout;                 // fd for job stdout
+    int job_stderr;                 // fd for job stdout
+    bool running;                   // is this job currently running?
+    int exit_stat;                  // exit status as returned by waitpid
+    write_callback on_write;        // called when the process writes to stdout/stderr
+    char temp_path[TEMP_NAME_SIZE]; // path to the job script
 };
 
 // initialize the job table

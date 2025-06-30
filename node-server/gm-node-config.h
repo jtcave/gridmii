@@ -26,8 +26,9 @@
 // (n.b. 4000 characters is the Discord character cap if you have Nitro)
 #define JOB_SCRIPT_LIMIT 4000
 
-// temp file prefix
+// temp file names
 #define TEMP_PREFIX "/tmp/gridmii-"
 #define TEMP_PATTERN TEMP_PREFIX "XXXXXX"
+#define TEMP_NAME_SIZE sizeof(TEMP_PATTERN)
 
 #endif
