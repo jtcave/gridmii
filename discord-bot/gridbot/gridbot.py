@@ -47,7 +47,6 @@ class FlexBot(discord.ext.commands.Bot):
         raise NotImplementedError("flex command not specified")
 
     # flex replies
-    # TODO: we're subclassing on_message anyway, may as well roll our invoke override into it
 
     async def on_message(self, message: Message, /) -> None:
         if message.author.bot:
@@ -418,7 +417,6 @@ class JobControlCog(discord.ext.commands.Cog, name="Job Control"):
         if job is not None:
             # add 1 to `lines` because there's probably a blank line at the end, and the user won't be counting that
             buffer_tail = '\n'.join(job.tail(lines+1))
-            # TODO: escape output
             output = f"```ansi\n{buffer_tail}\n```"
             if len(output) > 2000:
                 # Ideally we'd lower the parameter until it fits...

@@ -35,9 +35,8 @@ class Job:
 
     table: dict[int, Self] = {}
 
-    # TODO: find out how to get this magic number from Discord or discord.py
-    # TODO: kill the job if the stdout buffer gets to a preposterous (hundreds of KB?) size
-    MESSAGE_LIMIT = 2000    # assume no Nitro
+    # this magic number is the mas number of characters a Discord message can have (without a Nitro sub)
+    MESSAGE_LIMIT = 2000
 
     # The bot is responsible for issuing JIDs. Keep track of the last JID issued.
     last_jid: int = 0
@@ -94,7 +93,6 @@ class Job:
         if not self.started:
             logging.warning(f"jid {self.jid} got write message before starting")
         self.output_buffer.write(data)
-        # TODO: escape the content so triple-backquotes don't wreck the output
         if not self.will_attach:
             # format the output message
             content = f"Running...\n```ansi\n{self.buffer_contents()}\n```"
