@@ -9,4 +9,5 @@ pyvenv.cfg
 *.pyc
 
 # don't track the data dir; it has keys and other site-specific info
-data/*
+data/*.json
+data/*.sqlite
