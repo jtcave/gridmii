@@ -8,5 +8,5 @@ lib/*
 pyvenv.cfg
 *.pyc
 
-# leave out the config file; it has keys
-config.json
+# don't track the data dir; it has keys and other site-specific info
+data/*

@@ -2,7 +2,7 @@
 import json
 import discord
 
-with open("config.json", 'r') as config_file:
+with open("data/config.json", 'r') as config_file:
     config = json.load(config_file)
 TOKEN = config['token']
 GUILD = discord.Object(id=config['guild'])
