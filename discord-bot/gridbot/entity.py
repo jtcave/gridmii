@@ -48,7 +48,7 @@ class Job:
         self.will_attach = False
         self.started = False
         self.target_node = target_node_name
-        self.filter = filter if output_filter else (lambda x: x)
+        self.filter = output_filter if output_filter else (lambda x: x)
 
     @classmethod
     def new_job(cls, output_message: discord.Message, target_node_name: str, output_filter=filter_backticks) -> Self:

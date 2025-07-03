@@ -1,5 +1,7 @@
 import asyncio
 import logging
+
+import discord.ext.commands
 from discord import Message
 from discord.ext import commands
 from discord.ext.commands import Context, errors
@@ -211,9 +213,9 @@ class GridMiiBot(FlexBot):
         await self.target_channel.send(f":mega: `{payload}`")
 
     async def submit_job(self, ctx: Context, command_string: str, output_filter=None):
-        if bot.mq_client is None:
-            logging.error("bot.mq_client is None!")
-            await ctx.send("**internal error!**")
+        if self.mq_client is None:
+            logging.error("GridMiiBot.mq_client is None!")
+            await ctx.send("**Internal error:** Couldn't submit a job because the MQTT client is not initialized")
             return
 
         # pick a node
@@ -266,12 +268,15 @@ def check_channel(ctx: Context) -> bool:
 
 class UserCommandCog(commands.Cog, name="User Commands"):
     """Cog for GridMii commands regular users can use"""
+    def __init__(self, bot: GridMiiBot):
+        self.bot = bot
+
     @commands.command(name="yougood")
     async def ping(self, ctx: Context):
         """Check connectivity to broker"""
-        if bot.mq_client is None:
+        if self.bot.mq_client is None:
             await ctx.reply(":-1: mq_client is None")
-        elif bot.mq_client._disconnected.done():
+        elif self.bot.mq_client._disconnected.done():
             # XXX: don't grovel into internal members like that
             await ctx.reply(":-1: mq_client._disconnected has come to pass")
         else:
@@ -286,7 +291,6 @@ class UserCommandCog(commands.Cog, name="User Commands"):
     @commands.command()
     async def locus(self, ctx: Context, new_locus: str|None=None):
         """Manually set the locus node for new jobs"""
-
         if new_locus is None:
             if Node.locus is None:
                 content = "No node is currently set to run commands.\nOne will be selected when the next command is sent."
@@ -302,7 +306,6 @@ class UserCommandCog(commands.Cog, name="User Commands"):
     @commands.command()
     async def jobs(self, ctx: Context):
         """View running jobs"""
-
         def _line(job: Job):
             return f"* #{job.jid}, on `{job.target_node}`, see {job.output_message.jump_url}"
 
@@ -314,6 +317,8 @@ class UserCommandCog(commands.Cog, name="User Commands"):
 
 class AdminCommandCog(commands.Cog, name="Admin Commands"):
     """Cog for commands only admins can use"""
+    def __init__(self, bot: GridMiiBot):
+        self.bot = bot
 
     async def cog_check(self, ctx: Context) -> bool:
         user_roles = [r.id for r in ctx.author.roles]
@@ -328,7 +333,7 @@ class AdminCommandCog(commands.Cog, name="Admin Commands"):
         """Terminate all jobs across the entire grid"""
         logging.warning("scram command called")
         try:
-            await bot.mq_client.publish("grid/scram")
+            await self.bot.mq_client.publish("grid/scram")
         except aiomqtt.MqttError as ex_mq:
             logging.exception("error publishing scram")
             await ctx.message.reply(f"**Couldn't send scram request**: {str(ex_mq)}")
@@ -345,7 +350,7 @@ class AdminCommandCog(commands.Cog, name="Admin Commands"):
         if node is None:
             await ctx.reply(f"node {node_name} is not in the node table")
         else:
-            await node.reload(bot.mq_client)
+            await node.reload(self.bot.mq_client)
         # no need to send an ack reply because the node should disconnect and reconnect
 
     @commands.command()
@@ -359,7 +364,7 @@ class AdminCommandCog(commands.Cog, name="Admin Commands"):
         if node is None:
             await ctx.reply(f"node {node_name} is not in the node table")
         else:
-            await node.eject(bot.mq_client)
+            await node.eject(self.bot.mq_client)
         # no need to send an ack reply because the node should disconnect
 
 FETCH_SCRIPT = """
@@ -370,6 +375,9 @@ fastfetch --pipe false -l none -s 'Title:Separator:OS:Host:Kernel:Uptime:Package
 assert len(FETCH_SCRIPT) < 2000     # discord message size
 class NeofetchCog(commands.Cog):
     """Cog for the $neofetch override"""
+    def __init__(self, bot: GridMiiBot):
+        self.bot = bot
+
     @commands.command()
     async def neofetch(self, ctx: Context):
         """Run fastfetch, then rearrange the output to look correct"""
@@ -377,6 +385,8 @@ class NeofetchCog(commands.Cog):
 
 class JobControlCog(discord.ext.commands.Cog, name="Job Control"):
     """Cog that contains commands to interact with a running job"""
+    def __init__(self, bot: GridMiiBot):
+        self.bot = bot
 
     @staticmethod
     def job_for_reply(ctx: Context) -> Job | None:
@@ -405,14 +415,14 @@ class JobControlCog(discord.ext.commands.Cog, name="Job Control"):
         """Send end-of-file to a job's stdin"""
         job = self.job_for_reply(ctx)
         if job is not None:
-            await job.eof(bot.mq_client)
+            await job.eof(self.bot.mq_client)
 
     @commands.command()
     async def signal(self, ctx: Context, signal_num: int):
         """Send a signal (numeric code) to a job"""
         job = self.job_for_reply(ctx)
         if job is not None:
-            await job.signal(signal_num, bot.mq_client)
+            await job.signal(signal_num, self.bot.mq_client)
             await ctx.reply(f"Sent signal {signal_num} to the job")
 
     @commands.command()
