@@ -157,6 +157,34 @@ class Job:
     def __repr__(self):
         return f"<Job: jid=#{self.jid} node='{self.target_node}'>"
 
+
+# noinspection PyMissingConstructor
+class RefusedJob(Job):
+    """A stub that represents a job that the controller has refused to submit."""
+
+    def __init__(self, jid: int, output_message: discord.Message, target_node_name: str, output_filter=None):
+        self.jid = jid
+        # self.output_buffer is not allowed to be accessed
+        self.output_message = output_message
+        self.will_attach = False
+        self.started = False
+        self.target_node = target_node_name
+        self.filter = filter if output_filter else (lambda x: x)
+
+    @classmethod
+    def new_job(cls, output_message: discord.Message, target_node_name: str, output_filter=filter_backticks) -> Self:
+        # don't issue a jid and don't track the RefusedJob in the job table
+        return cls(-1, output_message, target_node_name, output_filter)
+
+    @property
+    def output_buffer(self):
+        raise RuntimeError("tried to access the output buffer of a RefusedJob")
+
+    async def clean_if_unstarted(self, delay=20.0):
+        # no-op because we aren't in the job table anyway
+        return
+
+
 ## Node table ##
 class Node:
     """Represents a node in the grid"""
@@ -223,5 +251,35 @@ class Node:
         topic = f"{self.node_name}/reload"
         await mq_client.publish(topic)
 
+    async def eject(self, mq_client: aiomqtt.Client):
+        """Eject this node from the grid, preventing further access and requesting that it exit.
+        If jobs are running, all their output will be lost."""
+        logging.info(f"ejecting node {self.node_name}")
+        # put a node stub into the job table
+        stub = EjectedNode.from_node(self)
+        self.table[self.node_name] = stub
+        # tell the node to quit
+        topic = f"{self.node_name}/exit"
+        await mq_client.publish(topic)
+
     def __str__(self):
         return self.node_name
+
+class EjectedNode(Node):
+    """Represents a node that has been ejected from the grid. Users cannot submit jobs to an ejected node."""
+    @classmethod
+    def from_node(cls, former: Node):
+        self = cls(former.node_name)
+        return self
+
+    def can_accept_jobs(self):
+        return False
+
+    async def submit_job(self,
+                         command_string: str,
+                         output_message: discord.Message,
+                         mq_client: aiomqtt.Client,
+                         output_filter=None) -> RefusedJob:
+        logging.warning(f"tried to submit job to ejected node {self.node_name}")
+        await output_message.edit(content=f"Your job was not submitted because node {self.node_name} has been ejected.\nPlease select another node.")
+        return RefusedJob(-1, output_message, self.node_name, output_filter)

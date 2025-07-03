@@ -320,6 +320,7 @@ class AdminCommandCog(commands.Cog, name="Admin Commands"):
         for admin_role in ADMIN_ROLES:
             if admin_role in user_roles:
                 return True
+        logging.info(f"admin command denied for user '{ctx.author.display_name}' ({ctx.author.id})")
         return False
 
     @commands.command()
@@ -345,7 +346,21 @@ class AdminCommandCog(commands.Cog, name="Admin Commands"):
             await ctx.reply(f"node {node_name} is not in the node table")
         else:
             await node.reload(bot.mq_client)
-        # no need to send an ack reply because the node should induce connect/disconnect
+        # no need to send an ack reply because the node should disconnect and reconnect
+
+    @commands.command()
+    async def eject(self, ctx: Context, node_name:str|None=None):
+        """Eject a node from the grid.
+        WARNING: if jobs are running, output will be lost"""
+        if node_name is None:
+            await ctx.reply(f"`node_name` parameter required")
+            return
+        node = Node.table.get(node_name, None)
+        if node is None:
+            await ctx.reply(f"node {node_name} is not in the node table")
+        else:
+            await node.eject(bot.mq_client)
+        # no need to send an ack reply because the node should disconnect
 
 FETCH_SCRIPT = """
 fastfetch --pipe false -s none
