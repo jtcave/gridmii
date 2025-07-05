@@ -3,29 +3,39 @@ from discord.ext.commands import Context
 # from .gridbot import GridMiiBot
 from .entity import *
 
-class UserCommandCog(commands.Cog, name="User Commands"):
-    """Cog for GridMii commands regular users can use"""
+class GridMiiCogBase(commands.Cog):
+    """Base class for GridMii cogs"""
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @commands.command(name="yougood")
+    async def cog_before_invoke(self, ctx: Context):
+        # Automatically defer slash command interactions
+        # Fail fast if the interaction expires before
+        try:
+            await ctx.defer()
+        except discord.errors.NotFound:
+            raise commands.CommandError("interaction expired before it could be deferred")
+
+class UserCommandCog(GridMiiCogBase, name="User Commands"):
+    """Cog for GridMii commands regular users can use"""
+    @commands.hybrid_command(name="yougood")
     async def ping(self, ctx: Context):
         """Check connectivity to broker"""
         if self.bot.mq_client is None:
-            await ctx.reply(":-1: mq_client is None")
+            await ctx.send(":-1: mq_client is None")
         elif self.bot.mq_client._disconnected.done():
             # XXX: don't grovel into internal members like that
-            await ctx.reply(":-1: mq_client._disconnected has come to pass")
+            await ctx.send(":-1: mq_client._disconnected has come to pass")
         else:
             await ctx.reply(":+1:")
 
-    @commands.command()
+    @commands.hybrid_command()
     async def nodes(self, ctx: Context):
         """View available nodes"""
         message = '\n'.join(f"* {n}" for n in Node.table) if Node.table else "No nodes are online"
-        await ctx.message.reply(content=message)
+        await ctx.reply(content=message)
 
-    @commands.command()
+    @commands.hybrid_command()
     async def locus(self, ctx: Context, new_locus: str|None=None):
         """Manually set the locus node for new jobs"""
         if new_locus is None:
@@ -40,7 +50,7 @@ class UserCommandCog(commands.Cog, name="User Commands"):
             content = f":x: The node {new_locus} is not in the node table."
         await ctx.reply(content)
 
-    @commands.command()
+    @commands.hybrid_command()
     async def jobs(self, ctx: Context):
         """View running jobs"""
         def _line(job: Job):
@@ -52,11 +62,8 @@ class UserCommandCog(commands.Cog, name="User Commands"):
             table = "No jobs running"
         await ctx.message.reply(table)
 
-class AdminCommandCog(commands.Cog, name="Admin Commands"):
+class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
     """Cog for commands only admins can use"""
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
-
     async def cog_check(self, ctx: Context) -> bool:
         user_roles = [r.id for r in ctx.author.roles]
         for admin_role in ADMIN_ROLES:
@@ -65,7 +72,7 @@ class AdminCommandCog(commands.Cog, name="Admin Commands"):
         logging.info(f"admin command denied for user '{ctx.author.display_name}' ({ctx.author.id})")
         return False
 
-    @commands.command()
+    @commands.hybrid_command()
     async def scram(self, ctx: Context):
         """Terminate all jobs across the entire grid"""
         logging.warning("scram command called")
@@ -73,38 +80,32 @@ class AdminCommandCog(commands.Cog, name="Admin Commands"):
             await self.bot.mq_client.publish("grid/scram")
         except aiomqtt.MqttError as ex_mq:
             logging.exception("error publishing scram")
-            await ctx.message.reply(f"**Couldn't send scram request**: {str(ex_mq)}")
+            await ctx.reply(f"**Couldn't send scram request**: {str(ex_mq)}")
         else:
-            await ctx.message.reply(":+1: wait for the jobs to complete")
+            await ctx.reply(":+1: wait for the jobs to complete")
 
-    @commands.command()
-    async def reload(self, ctx: Context, node_name:str|None=None):
+    @commands.hybrid_command()
+    async def reload(self, ctx: Context, node_name:str):
         """Instruct a node to reload its server (useful for updates)"""
-        if node_name is None:
-            await ctx.reply(f"`node_name` parameter required\nfor example: `$reload {Node.locus}`?")
-            return
         node = Node.table.get(node_name, None)
         if node is None:
             await ctx.reply(f"node {node_name} is not in the node table")
         else:
             await node.reload(self.bot.mq_client)
-        # no need to send an ack reply because the node should disconnect and reconnect
+            await ctx.reply(":+1:")
 
-    @commands.command()
-    async def eject(self, ctx: Context, node_name:str|None=None):
+    @commands.hybrid_command()
+    async def eject(self, ctx: Context, node_name:str):
         """Eject a node from the grid.
         WARNING: if jobs are running, output will be lost"""
-        if node_name is None:
-            await ctx.reply(f"`node_name` parameter required")
-            return
         node = Node.table.get(node_name, None)
         if node is None:
             await ctx.reply(f"node {node_name} is not in the node table")
         else:
             await node.eject(self.bot.mq_client)
-        # no need to send an ack reply because the node should disconnect
+            await ctx.reply(":+1:")
 
-class JobControlCog(discord.ext.commands.Cog, name="Job Control"):
+class JobControlCog(GridMiiCogBase, name="Job Control"):
     """Cog that contains commands to interact with a running job"""
     def __init__(self, bot: commands.Bot):
         self.bot = bot
