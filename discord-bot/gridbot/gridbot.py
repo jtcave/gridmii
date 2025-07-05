@@ -40,9 +40,13 @@ class FlexBot(discord.ext.commands.Bot):
         if ctx.valid:
             await self.invoke(ctx)
         elif message.content.startswith(self.script_prefix):
-            await self.flex_command(ctx)
+            if await self.flex_check(ctx):
+                await self.flex_command(ctx)
         elif message.type == discord.MessageType.reply:
             await self.flex_reply(ctx)
+
+    async def flex_check(self, ctx: Context) -> bool:
+        return True
 
     async def flex_command(self, ctx: Context, /):
         """Run when a non-existent command is attempted"""
@@ -237,6 +241,8 @@ class GridMiiBot(FlexBot):
             return
         await job.stdin(payload, self.mq_client)
 
+    async def flex_check(self, ctx: Context) -> bool:
+        return check_channel(ctx)
 
     async def flex_command(self, ctx: Context, /):
         # chop off the command prefix
