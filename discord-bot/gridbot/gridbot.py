@@ -1,4 +1,6 @@
 import asyncio
+from typing import override
+
 import aiomqtt
 import logging
 
@@ -19,45 +21,32 @@ bot_intents.message_content = True
 class FlexBot(discord.ext.commands.Bot):
     """Adapts d.e.c.Bot to fit our use case better."""
 
-    # we want flex commands, we also want to swallow some exceptions
+    def __init__(self, *, command_prefix: str, script_prefix: str, intents: discord.Intents, **kwargs):
+        super().__init__(command_prefix, intents=intents, **kwargs)
+        self.script_prefix = script_prefix
 
     async def on_command_error(self, context: Context, exception: errors.CommandError, /) -> None:
         # Swallow exceptions that are due to user error and are not supposed to be serious issues
         if isinstance(exception, errors.CheckFailure):
             logging.debug("global command check failed")
-        elif context.command is None:
-            # no command object means to run the flex command
-            if await self.can_run(context):
-                try:
-                    await self.flex_command(context)
-                except Exception as flex_exc:
-                    logging.exception("exception in flex command function", exc_info=flex_exc)
-            else:
-                logging.debug("global flex command check failed")
         else:
             await super().on_command_error(context, exception)
 
-    async def invoke(self, ctx: Context, /) -> None:
-        try:
-            await super().invoke(ctx)
-        except errors.CommandNotFound:
+    @override
+    async def on_message(self, message: discord.Message, /):
+        if message.author.bot:
+            return
+        ctx = await self.get_context(message)
+        if ctx.valid:
+            await self.invoke(ctx)
+        elif message.content.startswith(self.script_prefix):
             await self.flex_command(ctx)
+        elif message.type == discord.MessageType.reply:
+            await self.flex_reply(ctx)
 
     async def flex_command(self, ctx: Context, /):
         """Run when a non-existent command is attempted"""
         raise NotImplementedError("flex command not specified")
-
-    # flex replies
-
-    async def on_message(self, message: Message, /) -> None:
-        if message.author.bot:
-            return
-        ctx = await self.get_context(message)
-        if message.type == discord.MessageType.reply and ctx.command is None:
-            # flex reply!
-            await self.flex_reply(ctx)
-        else:
-            await self.invoke(ctx)
 
     async def flex_reply(self, ctx: Context, /):
         raise NotImplementedError("flex reply not specified")
@@ -66,7 +55,7 @@ class FlexBot(discord.ext.commands.Bot):
 class GridMiiBot(FlexBot):
     """Discord client that accepts GridMii commands and processes MQTT messages"""
     def __init__(self, *, intents: discord.Intents):
-        super().__init__(command_prefix='$', intents=intents)
+        super().__init__(command_prefix='!', script_prefix='$', intents=intents)
         self.mqtt_task = None
         self.after_broker_connect_task = None
         self.broker_connected = asyncio.Event()
