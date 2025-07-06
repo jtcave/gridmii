@@ -56,12 +56,18 @@ This won't install the mosquitto server, so you can go to step 4
 pkgin in mosquitto gmake
 ```
 
-The Makefile requires GNU Make; it will not build with the NetBSD `make` command
+The Makefile requires GNU Make; it will not build with the NetBSD `make` command.
 
 ### macOS
 
 ```
 brew install mosquitto
+```
+
+### Alpine
+
+```
+apk add build-base mosquitto-dev
 ```
 
 ## Isolating jobs
@@ -71,6 +77,8 @@ You may wish to isolate jobs from the host in a container, a chroot, or some oth
 As an example, the `contain.sh` script will run a job in a systemd container named `gridmii-container` by copying the job script into the container and running it.
 
 ***TODO: instructions on setting up systemd containers***
+
+For testing and demonstration purposes, a Dockerfile that sets up an Alpine container is supplied. Mount a volume with a `gm-node.conf` and `gridmii.crt` files into `/gridmii/data`. **Note that the Dockerfile is configured to run the node server as root.**
 
 ## Configuration reference
 
