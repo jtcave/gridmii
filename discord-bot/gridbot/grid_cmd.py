@@ -1,6 +1,5 @@
 import discord.ext.commands as commands
 from discord.ext.commands import Context
-# from .gridbot import GridMiiBot
 from .entity import *
 
 class GridMiiCogBase(commands.Cog):
@@ -15,6 +14,10 @@ class GridMiiCogBase(commands.Cog):
             await ctx.defer()
         except discord.errors.NotFound:
             raise commands.CommandError("interaction expired before it could be deferred")
+
+    async def cog_check(self, ctx: Context) -> bool:
+        """If a channel was specified in the config, only allow commands in that channel."""
+        return ctx.channel.id == CHANNEL or CHANNEL is None
 
 class UserCommandCog(GridMiiCogBase, name="User Commands"):
     """Cog for GridMii commands regular users can use"""
@@ -65,10 +68,15 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
 class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
     """Cog for commands only admins can use"""
     async def cog_check(self, ctx: Context) -> bool:
+        # deny if the generic check fails
+        if not super().cog_check(ctx):
+            return False
+        # approve if any of the user roles are in the admin role set
         user_roles = [r.id for r in ctx.author.roles]
         for admin_role in ADMIN_ROLES:
             if admin_role in user_roles:
                 return True
+        # otherwise deny
         logging.info(f"admin command denied for user '{ctx.author.display_name}' ({ctx.author.id})")
         return False
 

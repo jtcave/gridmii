@@ -242,7 +242,8 @@ class GridMiiBot(FlexBot):
         await job.stdin(payload, self.mq_client)
 
     async def flex_check(self, ctx: Context) -> bool:
-        return check_channel(ctx)
+        """If a channel was specified in the config, only allow commands in that channel."""
+        return ctx.channel.id == CHANNEL or CHANNEL is None
 
     async def flex_command(self, ctx: Context, /):
         # chop off the command prefix
@@ -256,8 +257,3 @@ class GridMiiBot(FlexBot):
             await self.stdin_post(ctx, job)
 
 bot = GridMiiBot(intents=bot_intents)
-
-@bot.check
-def check_channel(ctx: Context) -> bool:
-    """If a channel was specified in the config, check to see if the command was sent in that channel."""
-    return ctx.channel.id == CHANNEL or CHANNEL is None
