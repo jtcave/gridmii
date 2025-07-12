@@ -5,6 +5,9 @@ from .entity import *
 class GridMiiCogBase(commands.Cog):
     """Base class for GridMii cogs"""
     def __init__(self, bot: commands.Bot):
+        # `bot` is actually a .gridbot.GridMiiBot, but that would be a circular import
+        if not hasattr(bot, "mq_client"):
+            raise TypeError("'bot' parameter is missing the 'mq_client' attribute (is it not a GridMiiBot?)")
         self.bot = bot
 
     async def cog_before_invoke(self, ctx: Context):
@@ -19,14 +22,20 @@ class GridMiiCogBase(commands.Cog):
         """If a channel was specified in the config, only allow commands in that channel."""
         return ctx.channel.id == CHANNEL or CHANNEL is None
 
+    @property
+    def mq_client(self) -> aiomqtt.Client:
+        """Returns the MQTT client associated with the bot"""
+        client: aiomqtt.Client = getattr(self.bot, "mq_client")
+        return client
+
 class UserCommandCog(GridMiiCogBase, name="User Commands"):
     """Cog for GridMii commands regular users can use"""
     @commands.hybrid_command(name="yougood")
     async def ping(self, ctx: Context):
         """Check connectivity to broker"""
-        if self.bot.mq_client is None:
+        if self.mq_client is None:
             await ctx.send(":-1: mq_client is None")
-        elif self.bot.mq_client._disconnected.done():
+        elif self.mq_client._disconnected.done():
             # XXX: don't grovel into internal members like that
             await ctx.send(":-1: mq_client._disconnected has come to pass")
         else:
@@ -85,7 +94,7 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
         """Terminate all jobs across the entire grid"""
         logging.warning("scram command called")
         try:
-            await self.bot.mq_client.publish("grid/scram")
+            await self.mq_client.publish("grid/scram")
         except aiomqtt.MqttError as ex_mq:
             logging.exception("error publishing scram")
             await ctx.reply(f"**Couldn't send scram request**: {str(ex_mq)}")
@@ -99,7 +108,7 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
         if node is None:
             await ctx.reply(f"node {node_name} is not in the node table")
         else:
-            await node.reload(self.bot.mq_client)
+            await node.reload(self.mq_client)
             await ctx.reply(":+1:")
 
     @commands.hybrid_command()
@@ -110,7 +119,7 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
         if node is None:
             await ctx.reply(f"node {node_name} is not in the node table")
         else:
-            await node.eject(self.bot.mq_client)
+            await node.eject(self.mq_client)
             await ctx.reply(":+1:")
 
     @commands.hybrid_command()
@@ -121,7 +130,7 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
             await ctx.reply(f":x: job #{jid} is not in the job table")
             return
         job = Job.table[jid]
-        await job.abandon(self.bot.mq_client)
+        await job.abandon(self.mq_client)
         await ctx.reply(f":+1: see {job.output_message.jump_url}")
 
 
@@ -157,14 +166,14 @@ class JobControlCog(GridMiiCogBase, name="Job Control"):
         """Send end-of-file to a job's stdin"""
         job = self.job_for_reply(ctx)
         if job is not None:
-            await job.eof(self.bot.mq_client)
+            await job.eof(self.mq_client)
 
     @commands.command()
     async def signal(self, ctx: Context, signal_num: int):
         """Send a signal (numeric code) to a job"""
         job = self.job_for_reply(ctx)
         if job is not None:
-            await job.signal(signal_num, self.bot.mq_client)
+            await job.signal(signal_num, self.mq_client)
             await ctx.reply(f"Sent signal {signal_num} to the job")
 
     @commands.command()
