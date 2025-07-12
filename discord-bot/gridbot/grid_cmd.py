@@ -69,7 +69,7 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
     """Cog for commands only admins can use"""
     async def cog_check(self, ctx: Context) -> bool:
         # deny if the generic check fails
-        if not super().cog_check(ctx):
+        if not await super().cog_check(ctx):
             return False
         # approve if any of the user roles are in the admin role set
         user_roles = [r.id for r in ctx.author.roles]
@@ -112,6 +112,18 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
         else:
             await node.eject(self.bot.mq_client)
             await ctx.reply(":+1:")
+
+    @commands.hybrid_command()
+    async def abandon(self, ctx: Context, jid:int):
+        """Immediately flush the output of the specified job and remove it from the job table"""
+        # This is an admin-only command now because it could lead to data loss if misused
+        if jid not in Job.table:
+            await ctx.reply(f":x: job #{jid} is not in the job table")
+            return
+        job = Job.table[jid]
+        await job.abandon(self.bot.mq_client)
+        await ctx.reply(f":+1: see {job.output_message.jump_url}")
+
 
 class JobControlCog(GridMiiCogBase, name="Job Control"):
     """Cog that contains commands to interact with a running job"""

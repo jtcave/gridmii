@@ -118,11 +118,14 @@ class Job:
         topic = f"{self.target_node}/signal/{self.jid}/{signal_num}"
         await mq_client.publish(topic, qos=2)
 
-    async def stopped(self, result: bytes):
-        """Called when the  job terminates, successfully or not"""
+    async def stopped(self, result: bytes=b'0', *, abandoned=False):
+        """Called when the job terminates, successfully or not"""
         # Decode the result code
-        result_code = int(result)
-        status = disposition(result_code)
+        if not abandoned:
+            result_code = int(result)
+            status = disposition(result_code)
+        else:
+            status = "The job was abandoned"
         if self.will_attach:
             # Upload the output buffer as an attachment
             self.output_buffer.seek(0)
@@ -153,6 +156,14 @@ class Job:
         """Return the last few lines of job output"""
         buffer_lines = self.buffer_contents().split('\n')
         return buffer_lines[-lines:]
+
+    async def abandon(self, mq_client: aiomqtt.Client):
+        """Immediately flush the output of the specified job and remove it from the job table"""
+        # Do as advertised: stop the job, which flushes output and removes it from the job table.
+        await self.stopped(abandoned=True)
+        # It's possible that we're still running on the node. We might get messages that we can no longer handle because
+        # we aren't in the job table anymore. Send a kill message to attempt to stop the job.
+        await self.signal(9, mq_client)
 
     def __repr__(self):
         return f"<Job: jid=#{self.jid} node='{self.target_node}'>"
