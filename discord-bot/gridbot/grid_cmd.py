@@ -30,7 +30,7 @@ class GridMiiCogBase(commands.Cog):
 
 class UserCommandCog(GridMiiCogBase, name="User Commands"):
     """Cog for GridMii commands regular users can use"""
-    @commands.hybrid_command(name="yougood")
+    @commands.command(name="yougood")
     async def ping(self, ctx: Context):
         """Check connectivity to broker"""
         if self.mq_client is None:
@@ -41,13 +41,13 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
         else:
             await ctx.reply(":+1:")
 
-    @commands.hybrid_command()
+    @commands.command()
     async def nodes(self, ctx: Context):
         """View available nodes"""
         message = '\n'.join(f"* {n}" for n in Node.table) if Node.table else "No nodes are online"
         await ctx.reply(content=message)
 
-    @commands.hybrid_command()
+    @commands.command()
     async def locus(self, ctx: Context, new_locus: str|None=None):
         """Manually set the locus node for new jobs"""
         if new_locus is None:
@@ -62,7 +62,7 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
             content = f":x: The node {new_locus} is not in the node table."
         await ctx.reply(content)
 
-    @commands.hybrid_command()
+    @commands.command()
     async def jobs(self, ctx: Context):
         """View running jobs"""
         def _line(job: Job):
@@ -89,7 +89,7 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
         logging.info(f"admin command denied for user '{ctx.author.display_name}' ({ctx.author.id})")
         return False
 
-    @commands.hybrid_command()
+    @commands.command()
     async def scram(self, ctx: Context):
         """Terminate all jobs across the entire grid"""
         logging.warning("scram command called")
@@ -101,7 +101,7 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
         else:
             await ctx.reply(":+1: wait for the jobs to complete")
 
-    @commands.hybrid_command()
+    @commands.command()
     async def reload(self, ctx: Context, node_name:str):
         """Instruct a node to reload its server (useful for updates)"""
         node = Node.table.get(node_name, None)
@@ -111,7 +111,7 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
             await node.reload(self.mq_client)
             await ctx.reply(":+1:")
 
-    @commands.hybrid_command()
+    @commands.command()
     async def eject(self, ctx: Context, node_name:str):
         """Eject a node from the grid.
         WARNING: if jobs are running, output will be lost"""
@@ -122,7 +122,7 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
             await node.eject(self.mq_client)
             await ctx.reply(":+1:")
 
-    @commands.hybrid_command()
+    @commands.command()
     async def abandon(self, ctx: Context, jid:int):
         """Immediately flush the output of the specified job and remove it from the job table"""
         # This is an admin-only command now because it could lead to data loss if misused

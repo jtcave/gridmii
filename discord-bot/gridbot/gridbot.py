@@ -77,8 +77,8 @@ class GridMiiBot(FlexBot):
         cogs = DEFAULT_COGS + (NeofetchCog,)
         for cog_class in cogs:
             await self.add_cog(cog_class(self))
-        # Install slash commands
-        await self.tree.sync()
+        ## Install slash commands
+        #await self.tree.sync()
 
     async def after_broker_connect(self):
         # Wait for the event to fire
