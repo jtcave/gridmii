@@ -6,16 +6,6 @@
 
 #include "gm-node.h"
 
-void transfer_to_stdout(struct job *jobspec, int source_fd, char *buffer, size_t readsize) {
-    if (source_fd == jobspec->job_stderr) {
-        // stderr to stderr
-        write(STDERR_FILENO, buffer, readsize);
-    }
-    else {
-        write(STDOUT_FILENO, buffer, readsize);
-    }
-}
-
 void on_stdout_mqtt(struct job *jobspec, int source_fd, char *buffer, size_t readsize) {
     if (readsize > 0) {
         // figure out the appropriate topic
