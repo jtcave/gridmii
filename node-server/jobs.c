@@ -14,6 +14,9 @@
 
 #include "gm-node.h"
 
+struct job *job_with_jid(jid_t jid);
+void close_job_fd(struct job *jobspec, int fd);
+
 // exit code for a job that failed to exec for one reason or another
 #define SPAWN_FAILURE 0xEE
 
@@ -64,6 +67,7 @@ void init_job(struct job *jobspec) {
     jobspec->running = false;
     jobspec->exit_stat = 0;
     jobspec->on_write = on_write_nothing;
+    jobspec->stdout_sent = 0;
     memset(jobspec->temp_path, 0, TEMP_NAME_SIZE);
 }
 
@@ -207,6 +211,13 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write, char *
     }
 }
 
+// Close stdout and stderr descriptors in the job
+void job_output_close(jid_t jid) {
+    struct job *jobspec = job_with_jid(jid);
+    close_job_fd(jobspec, jobspec->job_stdout);
+    close_job_fd(jobspec, jobspec->job_stderr);
+}
+
 // Close the given file descriptor in the job.
 // This is called when the event loop sees an EOF condition.
 void close_job_fd(struct job *jobspec, int fd) {
@@ -218,7 +229,7 @@ void close_job_fd(struct job *jobspec, int fd) {
         job_fdp = &(jobspec->job_stderr);
     }
     else {
-        errx(1, "tried to close bogus fd %d (stdout = %d; stderr = %d)",
+        warnx("tried to close bogus fd %d (stdout = %d; stderr = %d)",
             fd, jobspec->job_stdout, jobspec->job_stderr);
     }
     *job_fdp = -1;

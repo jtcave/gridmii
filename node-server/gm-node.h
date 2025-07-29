@@ -77,6 +77,7 @@ struct job {
     bool running;                   // is this job currently running?
     int exit_stat;                  // exit status as returned by waitpid
     write_callback on_write;        // called when the process writes to stdout/stderr
+    size_t stdout_sent;             // bytes already sent from stdout to MQTT
     char temp_path[TEMP_NAME_SIZE]; // path to the job script
 };
 
@@ -91,6 +92,9 @@ int job_stdin_write(jid_t jid, const char *data, size_t len);
 
 // close job stdin
 int job_stdin_eof(jid_t jid);
+
+// close job stdout and stderr
+void job_output_close(jid_t job);
 
 // send signal to job
 int job_signal(jid_t jid, int signum);

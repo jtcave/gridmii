@@ -26,6 +26,9 @@
 // (n.b. 4000 characters is the Discord character cap if you have Nitro)
 #define JOB_SCRIPT_LIMIT 4000
 
+// maximum amount a job can write to stdout+stderr
+#define STDOUT_LIMIT 262114 // 256k
+
 // temp file names
 #define TEMP_PREFIX "/tmp/gridmii-"
 #define TEMP_PATTERN TEMP_PREFIX "XXXXXX"

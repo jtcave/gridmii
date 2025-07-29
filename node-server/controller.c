@@ -8,12 +8,25 @@
 
 void on_stdout_mqtt(struct job *jobspec, int source_fd, char *buffer, size_t readsize) {
     if (readsize > 0) {
-        // figure out the appropriate topic
+        // construct destination topic for write message
         char topic_buf[512];
         const char *topic_leaf = (source_fd == jobspec->job_stderr) ? "stderr" : "stdout";
         snprintf(topic_buf, sizeof(topic_buf), "job/%d/%s", jobspec->job_id, topic_leaf);
-        // publish the contents of the buffer to the topic
+
+        // publish to the topic with the buffer contents as payload
         mosquitto_publish(gm_mosq, NULL, topic_buf, readsize, buffer, 2, false);
+
+        // update write count and check write quota
+        jobspec->stdout_sent += readsize;
+#ifdef STDOUT_LIMIT
+        if (jobspec->stdout_sent > STDOUT_LIMIT) {
+            // Close the job's stdout handles.
+            // This will cause SIGPIPE in the job, which will probably kill it.
+            fprintf(stderr, "closing outputs for job %d: sent %ld limit %d\n",
+                jobspec->job_id, jobspec->stdout_sent, STDOUT_LIMIT);
+            job_output_close(jobspec->job_id);
+        }
+#endif // STDOUT_LIMIT
     }
 }
 
