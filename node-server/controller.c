@@ -23,7 +23,7 @@ void on_stdout_mqtt(struct job *jobspec, int source_fd, char *buffer, size_t rea
             // Close the job's stdout handles.
             // This will cause SIGPIPE in the job, which will probably kill it.
             fprintf(stderr, "closing outputs for job %d: sent %ld limit %d\n",
-                jobspec->job_id, jobspec->stdout_sent, STDOUT_LIMIT);
+                jobspec->job_id, (unsigned long)jobspec->stdout_sent, STDOUT_LIMIT);
             job_output_close(jobspec->job_id);
         }
 #endif // STDOUT_LIMIT
