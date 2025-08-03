@@ -11,6 +11,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <sys/resource.h>
 
 #include "gm-node.h"
 
@@ -189,6 +190,20 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write, char *
                 err(SPAWN_FAILURE, "could not scrub environment from key %s", env_key);
             }
             env_key = envs_to_scrub[++i];
+        }
+
+        // Set process limit
+        struct rlimit rl;
+        rv = getrlimit(RLIMIT_NPROC, &rl);
+        if (rv == -1) {
+            err(SPAWN_FAILURE, "could not fetch process limit");
+        }
+        if (rl.rlim_max > PROC_LIMIT) {
+            rl.rlim_cur = rl.rlim_max = PROC_LIMIT;
+            rv = setrlimit(RLIMIT_NPROC, &rl);
+            if (rv == -1) {
+                err(SPAWN_FAILURE, "could not set process limit");
+            }
         }
 
         // exec the new process

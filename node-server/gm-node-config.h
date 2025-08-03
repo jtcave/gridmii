@@ -29,6 +29,9 @@
 // maximum amount a job can write to stdout+stderr
 #define STDOUT_LIMIT 262114 // 256k
 
+// process number ulimit (see setrlimit(2) RLIMIT_NPROC)
+#define PROC_LIMIT 48
+
 // temp file names
 #define TEMP_PREFIX "/tmp/gridmii-"
 #define TEMP_PATTERN TEMP_PREFIX "XXXXXX"
