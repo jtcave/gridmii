@@ -11,6 +11,7 @@ from .config import *
 from .entity import Job, Node
 from .grid_cmd import DEFAULT_COGS, JobControlCog
 from .neofetch import NeofetchCog
+from .cmd_denylist import permit_command
 
 
 ## discord part ##
@@ -210,6 +211,12 @@ class GridMiiBot(FlexBot):
         if self.mq_client is None:
             logging.error("GridMiiBot.mq_client is None!")
             await ctx.send("**Internal error:** Couldn't submit a job because the MQTT client is not initialized")
+            return
+
+        # denylist
+        if not permit_command(command_string):
+            logging.warning(f"denied command: {command_string}")
+            await ctx.message.reply(":octagonal_sign: That command is not allowed")
             return
 
         # pick a node
