@@ -1,4 +1,4 @@
-FROM python:3.13-slim-bookworm
+FROM python:3.13-slim-trixie
 WORKDIR /gridmii
 
 COPY requirements.txt ./
