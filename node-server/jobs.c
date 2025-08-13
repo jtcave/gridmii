@@ -193,6 +193,7 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write, char *
         }
 
         // Set process limit
+#ifdef PROC_LIMIT
         struct rlimit rl;
         rv = getrlimit(RLIMIT_NPROC, &rl);
         if (rv == -1) {
@@ -205,6 +206,7 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write, char *
                 err(SPAWN_FAILURE, "could not set process limit");
             }
         }
+#endif // PROC_LIMIT
 
         // exec the new process
         extern char **environ;

@@ -30,7 +30,7 @@
 #define STDOUT_LIMIT 262114 // 256k
 
 // process number ulimit (see setrlimit(2) RLIMIT_NPROC)
-#define PROC_LIMIT 48
+// #define PROC_LIMIT 128
 
 // temp file names
 #define TEMP_PREFIX "/tmp/gridmii-"
