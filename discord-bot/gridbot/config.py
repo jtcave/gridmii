@@ -1,9 +1,10 @@
 # load config file
-import json
+import tomllib
 import discord
 
-with open("data/config.json", 'r') as config_file:
-    config = json.load(config_file)
+with open("data/config.toml", 'rb') as config_file:
+    config = tomllib.load(config_file)
+
 TOKEN = config['token']
 GUILD = discord.Object(id=config['guild'])
 CHANNEL = config.get("channel", None)

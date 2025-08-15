@@ -11,3 +11,4 @@ pyvenv.cfg
 # don't track the data dir; it has keys and other site-specific info
 data/*.json
 data/*.sqlite
+data/*.toml
