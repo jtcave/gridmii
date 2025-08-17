@@ -78,6 +78,15 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
             table = "No jobs running"
         await ctx.message.reply(table)
 
+    @commands.command()
+    async def rules(self, ctx: Context):
+        try:
+            with open("data/rules.md", 'rb') as rules_file:
+                await ctx.reply(file=discord.File(rules_file))
+        except FileNotFoundError:
+            logging.error("data/rules.md not found")
+            await ctx.reply("rules file not found")
+
 class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
     """Cog for commands only admins can use"""
     async def cog_check(self, ctx: Context) -> bool:
