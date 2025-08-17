@@ -1,0 +1,40 @@
+
+# Discord Bot Token
+token = ""
+
+# Discord Guild ID
+guild = ""
+
+# Optional - Discord Channel ID to restrict to
+# Default: None
+channel = ""
+
+# Array of Discord role IDs that are administrators
+# Default: None
+admin_roles = [ ]
+
+# Optional - Array of Discord user IDs that are banned from using the bot
+# Default: None
+banned_users = [ ]
+
+# MQTT Broker domain
+mqtt_broker = "foo.example.com"
+
+# MQTT Broker port
+mqtt_port = 1234
+
+# Optional - Should broker use TLS?
+# Default: False
+mqtt_tls = false
+
+# Optional - MQTT Username
+# Default: ""
+mqtt_username = "epic_user"
+
+# Optional - MQTT Password
+# Default: ""
+mqtt_password = "alpine"
+
+# Optional - Default target node
+# Default: None
+target_node = "my_epic_node_name_here"
