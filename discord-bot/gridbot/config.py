@@ -9,6 +9,7 @@ TOKEN = config['token']
 GUILD = discord.Object(id=config['guild'])
 CHANNEL = config.get("channel", None)
 ADMIN_ROLES = config.get("admin_roles", [])
+BANNED_USERS = config.get("banned_users", [])
 BROKER = config["mqtt_broker"]
 PORT = config["mqtt_port"]
 MQTT_TLS = config.get("mqtt_tls", False)

@@ -50,7 +50,7 @@ class FlexBot(discord.ext.commands.Bot):
         return True
 
     async def flex_command(self, ctx: Context, /):
-        """Run when a non-existent command is attempted"""
+        """Run when a flex command is attempted"""
         raise NotImplementedError("flex command not specified")
 
     async def flex_reply(self, ctx: Context, /):
@@ -248,8 +248,11 @@ class GridMiiBot(FlexBot):
         await job.stdin(payload, self.mq_client)
 
     async def flex_check(self, ctx: Context) -> bool:
-        """If a channel was specified in the config, only allow commands in that channel."""
-        return ctx.channel.id == CHANNEL or CHANNEL is None
+        """Check for appropriate channel and user"""
+        # If a channel was specified in the config, only allow commands in that channel.
+        channel_ok =  ctx.channel.id == CHANNEL or CHANNEL is None
+        # Don't let banned users use the cog
+        return channel_ok and ctx.author.id not in BANNED_USERS
 
     async def flex_command(self, ctx: Context, /):
         # chop off the command prefix

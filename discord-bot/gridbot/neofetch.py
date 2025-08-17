@@ -3,6 +3,7 @@ from itertools import zip_longest
 import discord.ext.commands as commands
 
 from .output_filter import BACKTICKS_ZWS
+from .grid_cmd import GridMiiCogBase
 
 FETCH_SCRIPT = """
 fastfetch --pipe false -s none
@@ -10,11 +11,8 @@ echo '===snip==='
 fastfetch --pipe false -l none -s 'Title:Separator:OS:Host:Kernel:Uptime:Packages:CPU:Memory:Swap:Disk:LocalIp:Locale:Break'
 """
 assert len(FETCH_SCRIPT) < 2000     # discord message size
-class NeofetchCog(commands.Cog):
+class NeofetchCog(GridMiiCogBase):
     """Cog for the $neofetch override"""
-    def __init__(self, bot: commands.Bot):
-        self.bot = bot
-
     @commands.command()
     async def neofetch(self, ctx: commands.Context):
         """Run fastfetch, then rearrange the output to look correct"""

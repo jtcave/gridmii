@@ -19,8 +19,12 @@ class GridMiiCogBase(commands.Cog):
             raise commands.CommandError("interaction expired before it could be deferred")
 
     async def cog_check(self, ctx: Context) -> bool:
-        """If a channel was specified in the config, only allow commands in that channel."""
-        return ctx.channel.id == CHANNEL or CHANNEL is None
+        """Check for appropriate channel and user"""
+        # If a channel was specified in the config, only allow commands in that channel.
+        channel_ok =  ctx.channel.id == CHANNEL or CHANNEL is None
+        # Don't let banned users use the cog
+        return channel_ok and ctx.author.id not in BANNED_USERS
+
 
     @property
     def mq_client(self) -> aiomqtt.Client:
