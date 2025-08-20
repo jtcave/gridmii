@@ -61,9 +61,9 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
             if their_locus is None:
                 content = "You don't have a locus node set."
             elif their_locus.is_present:
-                content = f"Commands are being sent to `{Node.locus}`."
+                content = f"Commands are being sent to `{their_locus.node_name}`."
             else:
-                content = f"Commands are being sent to `{Node.locus}`, but that node isn't present."
+                content = f":warning: Commands are being sent to `{their_locus}`, but that node isn't present."
 
         elif new_locus in Node.table:
             # set new locus
