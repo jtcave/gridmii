@@ -74,10 +74,15 @@ class GridMiiBot(FlexBot):
         self.mqtt_task = self.loop.create_task(self.do_mqtt_task())
         # Install the "after broker connection" task"
         self.after_broker_connect_task = self.loop.create_task(self.after_broker_connect())
+
         # Install cogs
         cogs = DEFAULT_COGS + (NeofetchCog,)
         for cog_class in cogs:
             await self.add_cog(cog_class(self))
+
+        # add check to help command
+        # (reuse the flex check so the help command works iff flex commands work)
+        self.help_command.add_check(self.flex_check)
 
 
     async def after_broker_connect(self):
