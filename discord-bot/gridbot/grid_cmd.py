@@ -63,14 +63,14 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
             elif their_locus.is_present:
                 content = f"Commands are being sent to `{their_locus.node_name}`."
             else:
-                content = f":warning: Commands are being sent to `{their_locus}`, but that node isn't present."
+                content = f":warning: Commands are being sent to `{their_locus.node_name}`, but that node isn't present."
 
         elif new_locus in Node.table:
             # set new locus
             prefs.locus = new_locus
-            content = f":+1: Your commands will now run on {new_locus}"
+            content = f":+1: Your commands will now run on `{new_locus}`"
         else:
-            content = f":x: The node {new_locus} is not in the node table."
+            content = f":x: `{new_locus}` is not in the node table."
         await ctx.reply(content)
 
     @commands.command()
