@@ -80,6 +80,7 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
 
     @commands.command()
     async def rules(self, ctx: Context):
+        """Shows the bot's rules"""
         try:
             with open("data/rules.md", 'rb') as rules_file:
                 await ctx.reply(file=discord.File(rules_file))
@@ -148,7 +149,8 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
 
 
 class JobControlCog(GridMiiCogBase, name="Job Control"):
-    """Cog that contains commands to interact with a running job"""
+    """Cog that contains commands to interact with a running job.
+    For all of these commands, the job is specified by sending a command as a reply to the job's status/output message"""
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
@@ -176,14 +178,14 @@ class JobControlCog(GridMiiCogBase, name="Job Control"):
 
     @commands.command()
     async def eof(self, ctx: Context):
-        """Send end-of-file to a job's stdin"""
+        """Close a job's stdin, like Ctrl-D does"""
         job = self.job_for_reply(ctx)
         if job is not None:
             await job.eof(self.mq_client)
 
     @commands.command()
     async def signal(self, ctx: Context, signal_num: int):
-        """Send a signal (numeric code) to a job"""
+        """Send a signal (specified by numeric code) to a job"""
         job = self.job_for_reply(ctx)
         if job is not None:
             await job.signal(signal_num, self.mq_client)
@@ -191,12 +193,12 @@ class JobControlCog(GridMiiCogBase, name="Job Control"):
 
     @commands.command()
     async def kill(self, ctx: Context):
-        """Send SIGKILL to a job"""
+        """Send SIGKILL to a job (!ctrl-c is preferable)"""
         await self.signal(ctx, 9)    # SIGKILL is 9 on all platforms I can see
 
     @commands.command(name="ctrl-c")
     async def ctrlc(self, ctx: Context):
-        """Send SIGINT to a job, like pressing Ctrl-C"""
+        """Send SIGINT (Ctrl-C) to a job"""
         await self.signal(ctx, 2)    # SIGINT is 2 on all platforms I can see
 
     @commands.command()
