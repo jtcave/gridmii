@@ -54,14 +54,21 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
     @commands.command()
     async def locus(self, ctx: Context, new_locus: str|None=None):
         """Manually set the locus node for new jobs"""
+        prefs = UserPrefs.get_prefs(ctx.author)
         if new_locus is None:
-            if Node.locus is None:
-                content = "No node is currently set to run commands.\nOne will be selected when the next command is sent."
+            # query the current locus
+            their_locus = prefs.locus
+            if their_locus is None:
+                content = "You don't have a locus node set."
+            elif their_locus.is_present:
+                content = f"Commands are being sent to `{Node.locus}`."
             else:
-                content = f"Commands are being sent to {Node.locus}"
+                content = f"Commands are being sent to `{Node.locus}`, but that node isn't present."
+
         elif new_locus in Node.table:
-            Node.locus = new_locus
-            content = f":+1: Commands will now run on {new_locus}"
+            # set new locus
+            prefs.locus = new_locus
+            content = f":+1: Your commands will now run on {new_locus}"
         else:
             content = f":x: The node {new_locus} is not in the node table."
         await ctx.reply(content)

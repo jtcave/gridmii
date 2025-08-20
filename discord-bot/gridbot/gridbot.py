@@ -8,7 +8,7 @@ from discord import Message
 from discord.ext.commands import errors, Context
 
 from .config import *
-from .entity import Job, Node
+from .entity import Job, Node, UserPrefs
 from .grid_cmd import DEFAULT_COGS, JobControlCog
 from .neofetch import NeofetchCog
 from .cmd_denylist import permit_command
@@ -224,13 +224,17 @@ class GridMiiBot(FlexBot):
             return
 
         # pick a node
-        node = Node.pick_node()
-        if node is None:
-            await ctx.message.reply(":x: No nodes are available at the moment.")
-            return
+        # try the user's locus
+        node = UserPrefs.get_locus(ctx.author)
+        if node is None or not node.is_present:
+            # locus isn't there, so use our pick logic
+            node = Node.pick_node()
+            if node is None:
+                await ctx.message.reply(":x: No nodes are available at the moment.")
+                return
 
         # Post the reply that job output will go to
-        reply = await ctx.message.reply("Your job is starting...")
+        reply = await ctx.message.reply(f"Your job is starting on `{node.node_name}`...")
 
         # Submit the job
         try:

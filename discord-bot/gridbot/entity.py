@@ -66,7 +66,7 @@ class Job:
 
     async def startup(self):
         """Called when the job has successfully started."""
-        await self.output_message.edit(content="Your job has started! Stand by for output...")
+        await self.output_message.edit(content=f"Your job has started on `{self.target_node}`! Stand by for output...")
         self.started = True
 
     async def reject(self, error: bytes):
@@ -240,6 +240,11 @@ class Node:
         """Called when a node already in the table responds to a ping"""
         pass
 
+    @property
+    def is_present(self):
+        """True iff the node is present in the node table"""
+        return self.node_name in self.table
+
     def can_accept_jobs(self):
         # stub for now
         return True
@@ -294,3 +299,36 @@ class EjectedNode(Node):
         logging.warning(f"tried to submit job to ejected node {self.node_name}")
         await output_message.edit(content=f"Your job was not submitted because node {self.node_name} has been ejected.\nPlease select another node.")
         return RefusedJob(-1, output_message, self.node_name, output_filter)
+
+## map discord users to preferences
+
+class UserPrefs:
+    __pref_map: dict[int, Self] = {}
+
+    def __init__(self):
+        self._locus: str|None = None
+
+    @classmethod
+    def get_prefs(cls, user: discord.User) -> Self:
+        try:
+            return cls.__pref_map[user.id]
+        except KeyError:
+            instance = cls()
+            cls.__pref_map[user.id] = instance
+            return instance
+
+    @property
+    def locus(self) -> Node|None:
+        """The locus is the node the user prefers"""
+        return Node.table.get(self._locus, None)
+
+    @locus.setter
+    def locus(self, new_locus: Node|str|None):
+        if isinstance(new_locus, Node):
+            new_locus = new_locus.node_name
+        self._locus = new_locus
+
+    @classmethod
+    def get_locus(cls, user: discord.User) -> Node|None:
+        pref = cls.get_prefs(user)
+        return pref.locus
