@@ -18,6 +18,10 @@ class NeofetchCog(GridMiiCogBase):
         """Run fastfetch, then rearrange the output to look correct"""
         await self.bot.submit_job(ctx, FETCH_SCRIPT, fastfetch_filter)
 
+    async def fastfetch(self, ctx: commands.Context):
+            """Run fastfetch, then rearrange the output to look correct"""
+            await self.fastfetch(ctx)
+
 def fastfetch_filter(s: str) -> str:
     """Massage fastfetch output into something Discord likes"""
     # nasty maze of regexes
