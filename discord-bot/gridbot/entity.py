@@ -189,6 +189,7 @@ class Job:
 class RefusedJob(Job):
     """A stub that represents a job that the controller has refused to submit."""
 
+    # noinspection PyUnusedLocal
     def __init__(self, jid: int, output_message: discord.Message, target_node_name: str, output_filter=None, ctx: Context|None=None):
         self.jid = jid
         # self.output_buffer is not allowed to be accessed

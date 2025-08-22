@@ -37,10 +37,11 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
     @commands.command(name="yougood")
     async def ping(self, ctx: Context):
         """Check connectivity to broker"""
+        # noinspection PyProtectedMember
         if self.mq_client is None:
             await ctx.send(":-1: mq_client is None")
         elif self.mq_client._disconnected.done():
-            # XXX: don't grovel into internal members like that
+            # XXX: aiomqtt doesn't seem to expose this in a saner way
             await ctx.send(":-1: mq_client._disconnected has come to pass")
         else:
             await ctx.reply(":+1:")
