@@ -238,7 +238,7 @@ class GridMiiBot(FlexBot):
 
         # Submit the job
         try:
-            job = await node.submit_job(command_string, reply, self.mq_client, output_filter)
+            job = await node.submit_job(command_string, reply, self.mq_client, output_filter, ctx)
             bot.loop.create_task(job.clean_if_unstarted())
         except aiomqtt.exceptions.MqttError as ex_mq:
             logging.exception("error publishing job submission")
