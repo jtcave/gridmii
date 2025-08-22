@@ -5,6 +5,8 @@ import asyncio
 import logging
 import aiomqtt
 import discord
+from discord.ext.commands import Context
+import time
 
 from .config import *
 from .output_filter import filter_backticks
@@ -41,21 +43,24 @@ class Job:
     # The bot is responsible for issuing JIDs. Keep track of the last JID issued.
     last_jid: int = 0
 
-    def __init__(self, jid: int, output_message: discord.Message, target_node_name: str, output_filter=None):
+    def __init__(self, jid: int, output_message: discord.Message, target_node_name: str, output_filter=None, ctx: Context|None=None):
         self.jid = jid
         self.output_buffer = io.BytesIO()
         self.output_message = output_message
+        self.notified = False
         self.will_attach = False
         self.started = False
+        self.start_time = None
         self.target_node = target_node_name
         self.filter = output_filter if output_filter else (lambda x: x)
+        self.ctx = ctx
 
     @classmethod
-    def new_job(cls, output_message: discord.Message, target_node_name: str, output_filter=filter_backticks) -> Self:
+    def new_job(cls, output_message: discord.Message, target_node_name: str, output_filter=filter_backticks, ctx: Context|None=None) -> Self:
         """Create fresh job object tied to an output message"""
         cls.last_jid += 1
         jid = cls.last_jid
-        new_job_entry = cls(jid, output_message, target_node_name, output_filter)
+        new_job_entry = cls(jid, output_message, target_node_name, output_filter, ctx)
         cls.table[jid] = new_job_entry
         return new_job_entry
 
@@ -68,6 +73,7 @@ class Job:
         """Called when the job has successfully started."""
         await self.output_message.edit(content=f"Your job has started on `{self.target_node}`! Stand by for output...")
         self.started = True
+        self.start_time = time.monotonic()
 
     async def reject(self, error: bytes):
         """Called when the job could not start."""
@@ -120,6 +126,16 @@ class Job:
 
     async def stopped(self, result: bytes=b'0', *, abandoned=False):
         """Called when the job terminates, successfully or not"""
+        # Has the command been running for longer than the
+        # notify limit?  If so, mention the user.
+        # We must do this in a new message because message edits
+        # won't actually ping the user.
+        curTime = time.monotonic()
+        if (curTime - self.start_time) > NOTIFY_LIMIT and not self.notified:
+            await self.ctx.send(f"<@{self.ctx.message.author.id}> your job ({self.ctx.message.jump_url}) has finished")
+            # Since this function can recurse, avoid notifying the user twice
+            self.notified = True
+
         # Decode the result code
         if not abandoned:
             result_code = int(result)
@@ -173,19 +189,21 @@ class Job:
 class RefusedJob(Job):
     """A stub that represents a job that the controller has refused to submit."""
 
-    def __init__(self, jid: int, output_message: discord.Message, target_node_name: str, output_filter=None):
+    def __init__(self, jid: int, output_message: discord.Message, target_node_name: str, output_filter=None, ctx: Context|None=None):
         self.jid = jid
         # self.output_buffer is not allowed to be accessed
         self.output_message = output_message
+        self.notified = False
         self.will_attach = False
         self.started = False
         self.target_node = target_node_name
         self.filter = filter if output_filter else (lambda x: x)
+        self.ctx = None
 
     @classmethod
-    def new_job(cls, output_message: discord.Message, target_node_name: str, output_filter=filter_backticks) -> Self:
+    def new_job(cls, output_message: discord.Message, target_node_name: str, output_filter=filter_backticks, ctx: Context|None=None) -> Self:
         # don't issue a jid and don't track the RefusedJob in the job table
-        return cls(-1, output_message, target_node_name, output_filter)
+        return cls(-1, output_message, target_node_name, output_filter, ctx)
 
     @property
     def output_buffer(self):
@@ -253,9 +271,10 @@ class Node:
                          command_string: str,
                          output_message: discord.Message,
                          mq_client: aiomqtt.Client,
-                         output_filter=None) -> Job:
+                         output_filter=None,
+                         ctx: Context|None=None) -> Job:
         """Submit a job to the node"""
-        job = Job.new_job(output_message, self.node_name, output_filter)
+        job = Job.new_job(output_message, self.node_name, output_filter, ctx)
         topic = f"{self.node_name}/submit/{job.jid}"
         logging.debug(f"publishing job {job.jid} to node...")
         await mq_client.publish(topic, payload=command_string)
@@ -295,7 +314,8 @@ class EjectedNode(Node):
                          command_string: str,
                          output_message: discord.Message,
                          mq_client: aiomqtt.Client,
-                         output_filter=None) -> RefusedJob:
+                         output_filter=None,
+                         ctx: Context|None=None) -> RefusedJob:
         logging.warning(f"tried to submit job to ejected node {self.node_name}")
         await output_message.edit(content=f"Your job was not submitted because node {self.node_name} has been ejected.\nPlease select another node.")
         return RefusedJob(-1, output_message, self.node_name, output_filter)
