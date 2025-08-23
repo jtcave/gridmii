@@ -7,6 +7,8 @@ import aiomqtt
 import discord
 from discord.ext.commands import Context
 import time
+import human_readable as hr
+import datetime as dt
 
 from .config import *
 from .output_filter import filter_backticks
@@ -142,6 +144,16 @@ class Job:
             status = disposition(result_code)
         else:
             status = "The job was abandoned"
+
+        # difference between current time vs start time, human readable
+        cur_time = time.monotonic()
+        sec = cur_time - self.start_time
+
+        # enforce minimum threshold
+        if (sec > MIN_REPORT_SEC):
+            elapsed = hr.precise_delta(dt.timedelta(seconds=sec))
+            status += f" after {elapsed}"
+
         if self.will_attach:
             # Upload the output buffer as an attachment
             self.output_buffer.seek(0)

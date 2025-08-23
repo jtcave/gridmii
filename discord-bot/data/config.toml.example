@@ -43,3 +43,9 @@ target_node = "my_epic_node_name_here"
 #            an ongoing job finishes (successful or not)
 # Default: 60
 notify_limit = 60
+
+# Optional - Minimum limit, in seconds, to report the time
+#            elapsed on an ongoing job, in the job status,
+#            when it finishes (successful or not)
+# Default: 1
+min_report_limit = 1
