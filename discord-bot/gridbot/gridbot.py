@@ -116,7 +116,7 @@ class GridMiiBot(FlexBot):
             tls_params = None
 
         await self.wait_until_ready()
-        logging.info("Starting MQTT task")
+        logging.info("Starting MQTT task") # helpmii
 
         self.mq_client = aiomqtt.Client(BROKER, PORT,
                                         username=MQTT_USERNAME, password=MQTT_PASSWORD,
