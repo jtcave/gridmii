@@ -140,9 +140,14 @@ class GridMiiBot(FlexBot):
                 reconnect_delay = 3
                 logging.exception(f"Lost connection to broker. Retrying in {reconnect_delay} seconds")
                 await asyncio.sleep(reconnect_delay)
-            except Exception:
+            except discord.DiscordException as dis_exc:
+                # log discord exceptions
+                logging.exception("discord.py exception in MQTT task")
+            except Exception as exc:
+                # complain in the target channel about exceptions we don't understand
                 logging.exception("Unhandled exception in MQTT task")
-                raise
+                if self.target_channel:
+                    await self.target_channel.send(f":warning: wii messed up: {str(exc)}")
 
     async def ping_grid(self):
         await self.mq_client.publish("grid/ping")
