@@ -44,6 +44,7 @@ const char *default_node_name() {
 }
 
 // populate gm_config according to the environment
+// configmii
 void init_config(int argc, char *const *argv) {
     gm_config.argc = argc;
     gm_config.argv = argv;
