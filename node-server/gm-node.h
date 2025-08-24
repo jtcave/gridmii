@@ -109,6 +109,9 @@ void do_job_events(void);
 // Terminate all jobs
 void job_scram(void);
 
+// Job roll call
+void job_roll_call(void);
+
 /// declarations - message response controller
 
 // incoming message router

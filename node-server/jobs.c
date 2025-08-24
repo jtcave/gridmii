@@ -434,6 +434,36 @@ void job_scram() {
     return;
 }
 
+// Publish a roll call
+void job_roll_call() {
+    /*
+    {
+        "node": name_of_node,
+        "jobs": [jid_1, jid_2, jid_3...]
+    }
+    */
+    json_t *root, *job_array, *node_name;
+    root = json_object();
+    node_name = json_string(gm_config.node_name);
+    job_array = json_array();
+    json_object_set_new(root, "node", node_name);
+    json_object_set_new(root, "jobs", job_array);
+    for (int i = 0; i < MAX_JOBS; i++) {
+        struct job *jobspec = &job_table[i];
+        if (job_active(jobspec)) {
+            json_t *j_jid = json_integer(jobspec->job_id);
+            json_array_append(job_array, j_jid);
+        }
+    }
+    char *ser = json_dumps(root, JSON_COMPACT);
+    if (ser == NULL) {
+        warnx("could not serialize JSON for job_roll_call()");
+        return;
+    }
+    // TODO: actually publish this to an MQTT topic
+    puts(ser);
+}
+
 // Submit a job by providing a shell command
 int submit_job(jid_t jid, write_callback on_write, const char *command) {
     // First, put the command in a temporary file to be used as a shell script.
