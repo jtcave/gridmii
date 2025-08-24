@@ -186,6 +186,11 @@ void gm_route_message(const struct mosquitto_message *message) {
     else if (strcmp(message->topic, "grid/scram") == 0) {
         job_scram();
     }
+
+    // broadcast roll_call
+    else if (strcmp(message->topic, "grid/roll_call") == 0) {
+        job_roll_call();
+    }
     
     // unrecognized topic, complain
     else {
