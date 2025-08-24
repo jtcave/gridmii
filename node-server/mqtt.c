@@ -261,6 +261,24 @@ void gm_announce(void) {
     }
 }
 
+// Serialize a JSON object and publish it as the payload of a given topic
+// Takes ownership of the object and decrefs it.
+int gm_publish_json(json_t *js, const char *topic, int qos, bool retain) {
+    char *ser = json_dumps(js, JSON_COMPACT);
+    int rv;
+    if (ser) {
+        rv = mosquitto_publish(gm_mosq, NULL, topic, strlen(ser), ser, qos, retain);
+        free(ser);
+    }
+    else {
+        // can't do anything about an error, just publish a message and hope for the best
+        rv = mosquitto_publish(gm_mosq, NULL, topic, 0, "", qos, retain);
+    }
+    json_decref(js);
+    return rv;
+}
+
+
 // Disconnect from the broker and free resources
 void gm_disconnect() {
     // Send disconect message 
