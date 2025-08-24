@@ -43,6 +43,10 @@ struct mosquitto *gm_init_mqtt(void);
 // Connect to the broker and subscribe to topics
 void gm_connect_mqtt(void);
 
+// Serialize a JSON object and publish it as the payload of a given topic
+// Takes ownership of the object and decrefs it.
+int gm_publish_json(json_t *js, const char *topic, int qos, bool retain);
+
 // Announce the node's existence to the grid
 void gm_announce(void);
 

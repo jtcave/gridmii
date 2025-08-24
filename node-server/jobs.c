@@ -442,12 +442,16 @@ void job_roll_call() {
         "jobs": [jid_1, jid_2, jid_3...]
     }
     */
+
+    // assemble object skeleton
     json_t *root, *job_array, *node_name;
     root = json_object();
     node_name = json_string(gm_config.node_name);
     job_array = json_array();
     json_object_set_new(root, "node", node_name);
     json_object_set_new(root, "jobs", job_array);
+
+    // populate job array
     for (int i = 0; i < MAX_JOBS; i++) {
         struct job *jobspec = &job_table[i];
         if (job_active(jobspec)) {
@@ -455,13 +459,12 @@ void job_roll_call() {
             json_array_append(job_array, j_jid);
         }
     }
-    char *ser = json_dumps(root, JSON_COMPACT);
-    if (ser == NULL) {
-        warnx("could not serialize JSON for job_roll_call()");
-        return;
+    
+    // publish message
+    int rv = gm_publish_json(root, "node/roll_call", 2, false);
+    if (rv != MOSQ_ERR_SUCCESS) {
+        warnx("could not publish roll call: %s", mosquitto_strerror(rv));
     }
-    // TODO: actually publish this to an MQTT topic
-    puts(ser);
 }
 
 // Submit a job by providing a shell command
