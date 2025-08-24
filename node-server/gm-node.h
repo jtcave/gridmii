@@ -2,6 +2,7 @@
 
 #include <sys/types.h>
 #include <mosquitto.h>
+#include <jansson.h>
 
 #ifndef _GM_NODE_H
 #define _GM_NODE_H
