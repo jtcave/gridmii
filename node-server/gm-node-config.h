@@ -33,8 +33,9 @@
 // #define PROC_LIMIT 128
 
 // temp file names
-#define TEMP_PREFIX "/tmp/gridmii-"
-#define TEMP_PATTERN TEMP_PREFIX "XXXXXX"
-#define TEMP_NAME_SIZE sizeof(TEMP_PATTERN)
+#define TEMP_PATTERN "XXXXXX"
+
+// should be reasonable with any TMPDIR
+#define MAX_TEMP_NAME_SIZE 80
 
 #endif

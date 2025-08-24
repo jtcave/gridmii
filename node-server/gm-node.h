@@ -22,6 +22,8 @@ struct gm_config_data {
     const char *node_name;      // name of node in the grid
     const char *job_cwd;        // starting directory for jobs
     const char *job_shell;      // shell used to run job script
+    const char *tmpdir;         // temporary directory
+    int tmp_name_size;          // temporary filename size
 };
 
 // global configuration table
@@ -78,7 +80,7 @@ struct job {
     int exit_stat;                  // exit status as returned by waitpid
     write_callback on_write;        // called when the process writes to stdout/stderr
     size_t stdout_sent;             // bytes already sent from stdout to MQTT
-    char temp_path[TEMP_NAME_SIZE]; // path to the job script
+    char temp_path[MAX_TEMP_NAME_SIZE]; // path to the job script
 };
 
 // initialize the job table
