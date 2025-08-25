@@ -1,4 +1,6 @@
 import asyncio
+import json
+import time
 from typing import override
 
 import aiomqtt
@@ -200,6 +202,20 @@ class GridMiiBot(FlexBot):
                 case "announce":
                     logging.info(f"node announcement: {payload}")
                     await self.announce_string(payload)
+                case "roll_call":
+                    # decode response
+                    try:
+                        decoded = json.loads(payload)
+                    except json.JSONDecodeError:
+                        logging.exception(f"bad JSON in roll_call: {payload}")
+                        return
+                    # unpack response
+                    if not ("node" in decoded and "jobs" in decoded):
+                        logging.error(f"missing field(s) in JSON: {payload}")
+                        return
+                    node_name: str = decoded["node"]
+                    job_list: list[int] = decoded["jobs"]
+                    await self.on_roll_call_reply(node_name, job_list)
 
     # end async def on_mqtt
 
@@ -215,6 +231,19 @@ class GridMiiBot(FlexBot):
         # don't respect self.can_announce
         # these kinds of announcements aren't directly caused by us starting up
         await self.target_channel.send(f":mega: `{payload}`")
+
+    async def on_roll_call_reply(self, node_name: str, job_list: list[int]):
+        # set of jobs that belong to the node
+        node_jobs = {j for j in Job.table.values() if j.target_node == node_name}
+        # known good jobs
+        job_set = {Job.table[jid] for jid in job_list if jid in Job.table}
+        # jobs that belong to the node, but are not known good and hence should be abandoned
+        bad_jobs = node_jobs - job_set
+        for j in bad_jobs:
+            logging.warning(f"job {j.jid} is lost")
+            await j.abandon(self.mq_client)
+
+
 
     async def submit_job(self, ctx: Context, command_string: str, output_filter=None):
         if self.mq_client is None:
