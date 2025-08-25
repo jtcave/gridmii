@@ -1,7 +1,6 @@
 // jobs.c - job and subprocess management
 
 #include <errno.h>
-#include <spawn.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <signal.h>
@@ -69,7 +68,7 @@ void init_job(struct job *jobspec) {
     jobspec->exit_stat = 0;
     jobspec->on_write = on_write_nothing;
     jobspec->stdout_sent = 0;
-    memset(jobspec->temp_path, 0, TEMP_NAME_SIZE);
+    memset(jobspec->temp_path, 0, gm_config.tmp_name_size);
 }
 
 void init_job_table() {
@@ -437,8 +436,8 @@ void job_scram() {
 // Submit a job by providing a shell command
 int submit_job(jid_t jid, write_callback on_write, const char *command) {
     // First, put the command in a temporary file to be used as a shell script.
-    char path[TEMP_NAME_SIZE];
-    memcpy(path, TEMP_PATTERN, TEMP_NAME_SIZE);
+    char *path = malloc(gm_config.tmp_name_size);
+    snprintf(path, gm_config.tmp_name_size, "%s/%s", gm_config.tmpdir, TEMP_PATTERN);
     int scriptfd = mkstemp(path);
     if (scriptfd == -1) {
         int rv = errno;
@@ -455,10 +454,11 @@ int submit_job(jid_t jid, write_callback on_write, const char *command) {
     struct job *jobspec = empty_job_slot();
     if (jobspec == NULL) {
         // this seems to be a semi-reasonable error return for "no job slots available"
+        free(path);
         return EUSERS;
     }
     // stash path to script
-    memcpy(jobspec->temp_path, path, TEMP_NAME_SIZE);
+    memcpy(jobspec->temp_path, path, gm_config.tmp_name_size);
     
     // actually launch the job
     int spawn_code = spawn_job(jobspec, jid, on_write, argv);
@@ -466,6 +466,7 @@ int submit_job(jid_t jid, write_callback on_write, const char *command) {
     if (spawn_code != 0) {
         job_rm_temp(jobspec);
     }
+    free(path);
     return spawn_code;
 }
 

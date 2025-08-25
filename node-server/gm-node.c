@@ -1,4 +1,3 @@
-#include <spawn.h>
 #include <unistd.h>
 #include <poll.h>
 #include <stdlib.h>
@@ -76,6 +75,12 @@ void init_config(int argc, char *const *argv) {
     char *env_job_shell = getenv("GRID_JOB_SHELL");
     gm_config.job_shell = env_job_shell ? env_job_shell : "/bin/sh";
 
+    char *env_tmpdir = getenv("TMPDIR");
+    gm_config.tmpdir = env_tmpdir ? env_tmpdir : "/tmp";
+
+    // calculate max size len
+    gm_config.tmp_name_size = strlen(gm_config.tmpdir) + sizeof(TEMP_PATTERN) + 1;
+
     // dump the config for debugging
     puts("Your configuration:");
     printf("GRID_HOST=%s\n", gm_config.grid_host);
@@ -86,6 +91,7 @@ void init_config(int argc, char *const *argv) {
     printf("NODE_NAME=%s\n", gm_config.node_name);
     printf("GRID_JOB_CWD=%s\n", gm_config.job_cwd);
     printf("GRID_JOB_SHELL=%s\n", gm_config.job_shell);
+    printf("TMPDIR=%s\n", gm_config.tmpdir);
     puts("");
 
     // do some sanity checking
@@ -96,12 +102,24 @@ void init_config(int argc, char *const *argv) {
 }
 
 void exit_cleanup(void) {
+    char *cmd;
+    int cmdSz = strlen("rm -f ") + gm_config.tmp_name_size;
+
     // Don't do anything if this is one of the child processes
     if (gm_in_child) return;
 
+    // get space for the command
+    cmd = malloc(cmdSz);
+
+    // make the command
+    snprintf(cmd, cmdSz, "rm -f %s/%s", gm_config.tmpdir, TEMP_PATTERN);
+
     // clean up any stale job scripts that might be lying around
-    puts("rm -f " TEMP_PREFIX "*");
-    system("rm -f " TEMP_PREFIX "*");
+    puts(cmd);
+    system(cmd);
+
+    // clean up
+    free(cmd);
 }
 
 void sigint_cleanup(int signum) {

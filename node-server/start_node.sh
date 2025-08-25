@@ -33,5 +33,19 @@ else
         echo 'Try running `make` or `gmake`.'
         exit 1
     fi
+    if [ "$TMPDIR" = "" ]
+    then
+        echo 'Your $TMPDIR environment variable appears to be empty.  A default value of /tmp/ will be used.'
+	# ensure that it's really unset
+	unset TMPDIR
+    fi
+
+    # if it's an empty but set string, that's fatal to the server - complain
+    if [ "$GRID_NODE_NAME" = "" ]
+    then
+        echo 'Your $GRID_NODE_NAME environment variable appears to be empty.  It must contain a valid value for the node server to start.'
+	echo 'Please assign $GRID_NODE_NAME a non-empty value.'
+	exit 1
+    fi
     exec $NODE_BIN
 fi
