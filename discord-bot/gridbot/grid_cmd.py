@@ -152,12 +152,20 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
     @commands.command()
     async def reload(self, ctx: Context, node_name:str):
         """Instruct a node to reload its server (useful for updates)"""
-        node = Node.table.get(node_name, None)
-        if node is None:
-            await ctx.reply(f"node {node_name} is not in the node table")
-        else:
-            await node.reload(self.mq_client)
-            await ctx.reply(":+1:")
+        nodes = Node.nodes_by_name(node_name)
+        if len(nodes) == 0:
+            await ctx.reply(f":x: node {node_name} is not in the node table")
+        elif len(nodes) > 1:
+            content = f":question: `{new_locus}` matches multiple nodes!  Possible options:\n"
+            for node in nodes:
+                content += f"- `{node.node_name}`\n"
+
+            content += "\nPlease specify exactly one of the above nodes."
+            await ctx.reply(content)
+            return
+        elif len(nodes) == 1:
+            await nodes[0].reload(self.mq_client)
+            await ctx.reply(f":+1: Reloaded `{nodes[0].node_name}`")
 
     @commands.command()
     async def eject(self, ctx: Context, node_name:str):
