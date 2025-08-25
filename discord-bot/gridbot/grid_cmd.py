@@ -169,6 +169,12 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
         await job.abandon(self.mq_client)
         await ctx.reply(f":+1: see {job.output_message.jump_url}")
 
+    @commands.command()
+    async def rollcall(self, ctx: Context):
+        """Force a roll call"""
+        await self.mq_client.publish("grid/roll_call")
+        await ctx.reply(":+1:")
+
 
 class JobControlCog(GridMiiCogBase, name="Job Control"):
     """Cog that contains commands to interact with a running job.
