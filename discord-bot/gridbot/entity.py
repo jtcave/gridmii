@@ -238,6 +238,27 @@ class Node:
         self.node_name = node_name
 
     @classmethod
+    def nodes_by_name(cls, node_name: str) -> list[Self]:
+        """
+        Check if we know this node (case-INsensitive) by name - return all matches found.
+        If more than 1 match is returned, the caller is expected to ask the user for clarification.
+        If 0 matches are returned, the caller is expected to complain that the node doesn't exist.
+        """
+        matches = list()
+        for node in cls.table.values():
+            if node.node_name == node_name:
+                # exact match, return it
+                # we can't have 2 nodes w/ the exact same name anyways, so it's pointless
+                # to continue
+                return node
+
+            if node.node_name.lower() == node_name.lower():
+                # case-insensitive match, added it to matches list
+                matches.append(node)
+
+        return matches
+
+    @classmethod
     def pick_node(cls) -> Self|None:
         """Select a node that can accept a job. If there are no available nodes, return None"""
         # Our first crude node selector logic:

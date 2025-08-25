@@ -69,12 +69,24 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
             else:
                 content = f":warning: Commands are being sent to `{their_locus.node_name}`, but that node isn't present."
 
-        elif new_locus in Node.table:
-            # set new locus
-            prefs.locus = new_locus
-            content = f":+1: Your commands will now run on `{new_locus}`"
         else:
-            content = f":x: `{new_locus}` is not in the node table."
+            matches = Node.nodes_by_name(new_locus)
+            if len(matches) > 1:
+                content = f":question: `{new_locus}` matches multiple nodes!  Possible options:\n"
+                for node in matches():
+                    content += f"- `{node.node_name}`\n"
+
+                content += "\nPlease specify exactly one of the above nodes."
+
+            elif len(matches) == 1:
+                # set new locus
+                new_locus = matches[0].node_name
+                prefs.locus = new_locus
+                content = f":+1: Your commands will now run on `{new_locus}`"
+
+            else:
+                content = f":x: `{new_locus}` is not in the node table."
+
         await ctx.reply(content)
 
     @commands.command()
