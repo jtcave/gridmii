@@ -73,7 +73,7 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
             matches = Node.nodes_by_name(new_locus)
             if len(matches) > 1:
                 content = f":question: `{new_locus}` matches multiple nodes!  Possible options:\n"
-                for node in matches():
+                for node in matches:
                     content += f"- `{node.node_name}`\n"
 
                 content += "\nPlease specify exactly one of the above nodes."
@@ -156,7 +156,7 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
         if len(nodes) == 0:
             await ctx.reply(f":x: node {node_name} is not in the node table")
         elif len(nodes) > 1:
-            content = f":question: `{new_locus}` matches multiple nodes!  Possible options:\n"
+            content = f":question: `{node_name}` matches multiple nodes!  Possible options:\n"
             for node in nodes:
                 content += f"- `{node.node_name}`\n"
 

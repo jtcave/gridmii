@@ -150,7 +150,7 @@ class Job:
         sec = cur_time - self.start_time
 
         # enforce minimum threshold
-        if (sec > MIN_REPORT_SEC):
+        if sec > MIN_REPORT_SEC:
             elapsed = hr.precise_delta(dt.timedelta(seconds=sec))
             status += f" after {elapsed}"
 
@@ -250,7 +250,7 @@ class Node:
                 # exact match, return it
                 # we can't have 2 nodes w/ the exact same name anyways, so it's pointless
                 # to continue
-                return node
+                return [node]
 
             if node.node_name.lower() == node_name.lower():
                 # case-insensitive match, added it to matches list
