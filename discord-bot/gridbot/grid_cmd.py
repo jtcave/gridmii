@@ -2,6 +2,7 @@ import human_readable as hr
 import datetime as dt
 import time
 import discord.ext.commands as commands
+import discord.ext.tasks as tasks
 from discord.ext.commands import Context
 from .entity import *
 
@@ -262,4 +263,18 @@ class JobControlCog(GridMiiCogBase, name="Job Control"):
                 output = f"***Output too large***\nThe message would have been {len(output)} characters long, but only 2000 are allowed"
             await ctx.reply(output)
 
-DEFAULT_COGS = (UserCommandCog, AdminCommandCog, JobControlCog)
+class AutoRollCallCog(GridMiiCogBase):
+    def __init__(self, bot: commands.Bot):
+        super().__init__(bot)
+        self.auto_roll_call.start()
+
+    def cog_unload(self) -> None:
+        self.auto_roll_call.cancel()
+
+    @tasks.loop(hours=1)
+    async def auto_roll_call(self):
+        if self.mq_client:
+            logging.info("performing roll call")
+            await self.mq_client.publish("grid/roll_call")
+
+DEFAULT_COGS = (UserCommandCog, AdminCommandCog, JobControlCog, AutoRollCallCog)
