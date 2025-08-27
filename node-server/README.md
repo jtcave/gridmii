@@ -2,7 +2,7 @@
 
 This is the part of GridMii that runs on the nodes and accepts commands from the bot.
 
-The node server should build on most POSIX-ish systems (I've tested on Linux/powerpc, Linux/aarch64, NetBSD/evbppc, and macOS/arm64.) The only build-time dependency is libmosquitto.
+The node server should build on most POSIX-ish systems (I've tested on Linux/powerpc, Linux/aarch64, NetBSD/evbppc, and macOS/arm64.) The only build-time dependencies are libmosquitto and libjansson.
 
 ## Setup instructions for Arch Linux
 
@@ -11,6 +11,8 @@ The node server should build on most POSIX-ish systems (I've tested on Linux/pow
    sudo pacman -Syu
    sudo pacman -S base-devel
    ```
+
+   This should pull in jansson as well.
 
 2) Install the `mosquitto` package:
    ```
@@ -45,15 +47,15 @@ The node server can be stopped by pressing Ctrl-C. If you want to run the node s
 You can follow the same instructions as above, except replace the pacman commands with:
 
 ```
-sudo apt install build-essential libmosquitto-dev
+sudo apt install build-essential libmosquitto-dev libjansson-dev
 ```
 
-This won't install the mosquitto server, so you can go to step 4
+This won't install the mosquitto server, so you can skip step 3.
 
 ### NetBSD
 
 ```
-pkgin in mosquitto gmake
+pkgin in gmake mosquitto jansson
 ```
 
 The Makefile requires GNU Make; it will not build with the NetBSD `make` command.
@@ -61,13 +63,13 @@ The Makefile requires GNU Make; it will not build with the NetBSD `make` command
 ### macOS
 
 ```
-brew install mosquitto
+brew install mosquitto jansson
 ```
 
 ### Alpine
 
 ```
-apk add build-base mosquitto-dev
+apk add build-base mosquitto-dev jansson-dev
 ```
 
 ## Isolating jobs

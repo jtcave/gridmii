@@ -2,6 +2,7 @@
 
 #include <sys/types.h>
 #include <mosquitto.h>
+#include <jansson.h>
 
 #ifndef _GM_NODE_H
 #define _GM_NODE_H
@@ -43,6 +44,10 @@ struct mosquitto *gm_init_mqtt(void);
 
 // Connect to the broker and subscribe to topics
 void gm_connect_mqtt(void);
+
+// Serialize a JSON object and publish it as the payload of a given topic
+// Takes ownership of the object and decrefs it.
+int gm_publish_json(json_t *js, const char *topic, int qos, bool retain);
 
 // Announce the node's existence to the grid
 void gm_announce(void);
@@ -109,6 +114,9 @@ void do_job_events(void);
 
 // Terminate all jobs
 void job_scram(void);
+
+// Job roll call
+void job_roll_call(void);
 
 /// declarations - message response controller
 

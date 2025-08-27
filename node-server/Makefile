@@ -1,5 +1,5 @@
 CFLAGS=-Wall -Os
-LDLIBS=-lmosquitto
+LDLIBS=-lmosquitto -ljansson
 
 # pull in Homebrew on macOS
 OSNAME := $(shell uname -s)
