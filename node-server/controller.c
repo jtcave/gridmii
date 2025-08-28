@@ -134,7 +134,7 @@ void gm_route_message(const struct mosquitto_message *message) {
         // TODO: report stdin write error on a more appropriate channel
         if (rv != 0) {
             char err_buf[128];
-            snprintf(err_buf, sizeof(err_buf), "error writing to job stdin: %s", strerror(rv));
+            snprintf(err_buf, sizeof(err_buf), "error writing to job #%d stdin: %s", jid, strerror(rv));
             gm_publish_node_announce(err_buf);
         }
     }
@@ -145,7 +145,7 @@ void gm_route_message(const struct mosquitto_message *message) {
         // TODO: report stdin errors on a more appropriate channel
         if (rv != 0) {
             char err_buf[128];
-            snprintf(err_buf, sizeof(err_buf), "error closing job stdin: %s", strerror(rv));
+            snprintf(err_buf, sizeof(err_buf), "error closing job #%d stdin: %s", jid, strerror(rv));
             gm_publish_node_announce(err_buf);
         }
     }
@@ -156,7 +156,7 @@ void gm_route_message(const struct mosquitto_message *message) {
         // TODO: report job manip errors on a more appropriate channel
         if (rv != 0) {
             char err_buf[128];
-            snprintf(err_buf, sizeof(err_buf), "error signalling job: %s", strerror(rv));
+            snprintf(err_buf, sizeof(err_buf), "error signalling job #%d: %s", jid, strerror(rv));
             gm_publish_node_announce(err_buf);
         }
     }
