@@ -102,24 +102,11 @@ void init_config(int argc, char *const *argv) {
 }
 
 void exit_cleanup(void) {
-    char *cmd;
-    int cmdSz = strlen("rm -f ") + gm_config.tmp_name_size;
-
     // Don't do anything if this is one of the child processes
     if (gm_in_child) return;
 
-    // get space for the command
-    cmd = malloc(cmdSz);
-
-    // make the command
-    snprintf(cmd, cmdSz, "rm -f %s/%s", gm_config.tmpdir, TEMP_PATTERN);
-
-    // clean up any stale job scripts that might be lying around
-    puts(cmd);
-    system(cmd);
-
-    // clean up
-    free(cmd);
+    // Currently there's nothing to do in this function except inform the operator
+    puts("\nnode server has exited\n");
 }
 
 void sigint_cleanup(int signum) {
