@@ -230,8 +230,10 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write, char *
 // Close stdout and stderr descriptors in the job
 void job_output_close(jid_t jid) {
     struct job *jobspec = job_with_jid(jid);
-    close_job_fd(jobspec, jobspec->job_stdout);
-    close_job_fd(jobspec, jobspec->job_stderr);
+    if (jobspec != NULL) {
+        close_job_fd(jobspec, jobspec->job_stdout);
+        close_job_fd(jobspec, jobspec->job_stderr);
+    }
 }
 
 // Close the given file descriptor in the job.
@@ -247,6 +249,8 @@ void close_job_fd(struct job *jobspec, int fd) {
     else {
         warnx("tried to close bogus fd %d (stdout = %d; stderr = %d)",
             fd, jobspec->job_stdout, jobspec->job_stderr);
+        // the fd is likely garbage, so let's not close it
+        return;
     }
     *job_fdp = -1;
     close(fd);
