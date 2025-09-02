@@ -35,17 +35,17 @@ else
     fi
     if [ "$TMPDIR" = "" ]
     then
-        echo 'Your $TMPDIR environment variable appears to be empty.  A default value of /tmp/ will be used.'
-	# ensure that it's really unset
-	unset TMPDIR
+        echo '\$TMPDIR appears to be blank. Falling back to /tmp'
+	    # ensure that it's really unset
+	    unset TMPDIR
     fi
 
     # if it's an empty but set string, that's fatal to the server - complain
     if [ "$GRID_NODE_NAME" = "" ]
     then
-        echo 'Your $GRID_NODE_NAME environment variable appears to be empty.  It must contain a valid value for the node server to start.'
-	echo 'Please assign $GRID_NODE_NAME a non-empty value.'
-	exit 1
+        echo 'GRID_NODE_NAME is empty. Please set GRID_NODE_NAME to the name of your node.'
+	    exit 1
     fi
+
     exec $NODE_BIN
 fi
