@@ -255,7 +255,19 @@ void do_mqtt_events() {
 
 // Announce the node's existence to the grid
 void gm_announce(void) {
-    int rv = mosquitto_publish(gm_mosq, NULL, "node/connect", strlen(gm_config.node_name), gm_config.node_name, 1, false);
+    /*
+    {
+        "node": gm_config.node_name
+        "version": GIT_VERSION
+    }
+    */
+    json_t *message = json_object();
+    json_t *message_node = json_string(gm_config.node_name);
+    json_t *message_version = json_string(GIT_VERSION);
+    json_object_set_new(message, "node", message_node);
+    json_object_set_new(message, "version", message_version);
+
+    int rv = gm_publish_json(message, "node/connect", 1, false);
     if (rv != MOSQ_ERR_SUCCESS) {
         errx(1, "could not announce, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
     }

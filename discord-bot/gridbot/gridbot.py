@@ -192,9 +192,7 @@ class GridMiiBot(FlexBot):
             payload = msg.payload.decode()
             match topic_path[1]:
                 case "connect":
-                    logging.info(f"node {payload} is present")
-                    Node.node_seen(payload)
-                    await self.announce_node_seen(payload)
+                    await self.on_node_present(payload)
                 case "disconnect":
                     logging.info(f"node {payload} has left")
                     Node.node_gone(payload)
@@ -219,7 +217,18 @@ class GridMiiBot(FlexBot):
 
     # end async def on_mqtt
 
-    async def announce_node_seen(self, node_name: str):
+    async def on_node_present(self, payload: str):
+        try:
+            message = json.loads(payload)
+            node_name = message["node"]
+            node_version = message["version"]
+        except json.JSONDecodeError:
+            # legacy non-JSON
+            node_name = payload
+            node_version = None
+
+        logging.info(f"node present: {node_name} version {node_version}")
+        Node.node_seen(node_name)
         if self.can_announce:
             await self.target_channel.send(f":inbox_tray: Node `{node_name}` is connected")
 
