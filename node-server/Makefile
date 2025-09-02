@@ -15,12 +15,19 @@ endif
 HEADERS = gm-node.h gm-node-config.h
 MODULES = mqtt.c jobs.c controller.c gm-node.c
 
+GIT_VERSION := "$(shell git describe --dirty --always --tags)"
+
 all: gm-node
+
+version.h: ../.git/index
+	printf '#ifndef GIT_VERSION\n#define GIT_VERSION "%s"\n#endif\n' "$(GIT_VERSION)" > version.h
+
+gm-node.h: version.h
 
 gm-node: $(HEADERS) $(MODULES)
 	$(CC) $(CFLAGS) -o gm-node  $(MODULES) $(LDLIBS)
 
 clean:
-	rm -rf gm-node *.o *.dSYM
+	rm -rf gm-node *.o *.dSYM version.h
 
 .PHONY: clean

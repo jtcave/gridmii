@@ -7,6 +7,8 @@
 #ifndef _GM_NODE_H
 #define _GM_NODE_H
 
+#include "version.h"
+
 #include "gm-node-config.h"
 
 /// declarations - misc system ///

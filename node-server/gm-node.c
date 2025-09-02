@@ -154,6 +154,8 @@ int main(int argc, char *const *argv) {
         err(1, "could not ignore SIGPIPE");
     }
 
+    // startup banner
+    puts("\tGridMii node server, version " GIT_VERSION "\n");
 
     // start up the subsystems and do an event loop
     init_config(argc, argv);
