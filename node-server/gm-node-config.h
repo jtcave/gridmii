@@ -11,7 +11,7 @@
 #define GRID_PORT_DEFAULT 1883
 
 // MQTT keepalive
-#define GRID_KEEPALIVE 30
+#define GRID_KEEPALIVE 60
 
 // buffer size for subprocess stdout/stderr reads
 #define BUFFER_SIZE 1024
