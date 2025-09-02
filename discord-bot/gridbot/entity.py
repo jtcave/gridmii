@@ -234,8 +234,9 @@ class Node:
     table: dict[str, Self] = {}
     locus: str|None = TARGET_NODE
 
-    def __init__(self, node_name):
+    def __init__(self, node_name: str, node_version: str|None = None):
         self.node_name = node_name
+        self.version = node_version
 
     @classmethod
     def nodes_by_name(cls, node_name: str) -> list[Self]:
@@ -274,13 +275,16 @@ class Node:
             return None
 
     @classmethod
-    def node_seen(cls, node_name: str) -> Self:
+    def node_seen(cls, node_name: str, node_version:str|None = None) -> Self:
         """Register the presence of the node with the given name, ensuring its presence in the table"""
         if node_name not in cls.table:
-            cls.table[node_name] = cls(node_name)
+            node = cls(node_name, node_version)
+            cls.table[node_name] = node
         else:
+            node = cls.table[node_name]
             cls.table[node_name].touch()
-        return cls.table[node_name]
+            node.version = node_version
+        return node
 
     @classmethod
     def node_gone(cls, node_name: str):
@@ -332,7 +336,7 @@ class Node:
         await mq_client.publish(topic, qos=2)
 
     def __str__(self):
-        return self.node_name
+        return f"{self.node_name} (version {self.version})"
 
 class EjectedNode(Node):
     """Represents a node that has been ejected from the grid. Users cannot submit jobs to an ejected node."""

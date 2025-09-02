@@ -230,7 +230,7 @@ class GridMiiBot(FlexBot):
             node_version = None
 
         logging.info(f"node present: {node_name} version {node_version}")
-        Node.node_seen(node_name)
+        Node.node_seen(node_name, node_version)
         if self.can_announce:
             await self.target_channel.send(f":inbox_tray: Node `{node_name}` is connected")
 

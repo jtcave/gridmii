@@ -53,7 +53,7 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
     @commands.command()
     async def nodes(self, ctx: Context):
         """View available nodes"""
-        message = '\n'.join(f"* {n}" for n in Node.table) if Node.table else "No nodes are online"
+        message = '\n'.join(f"* {n}" for n in Node.table.values()) if Node.table else "No nodes are online"
         await ctx.reply(content=message)
 
     @commands.command()
