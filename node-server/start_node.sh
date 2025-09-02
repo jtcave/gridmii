@@ -21,7 +21,7 @@ else
     echo "Loading config file: $CONFIG_FILE"
     . ./$CONFIG_FILE
     # demand a cert only if TLS is set 
-    if [ ! -r "$CERT_FILE" -a -n "$GRID_TLS" ]
+    if [ ! -r "$CERT_FILE" ] && [ -n "$GRID_TLS" ]
     then
         echo "You requested TLS, but the certificate seems to be missing."
         echo "Please place your certificate, named \`$CERT_FILE\`, in the current directory."
@@ -35,7 +35,7 @@ else
     fi
     if [ "$TMPDIR" = "" ]
     then
-        echo '\$TMPDIR appears to be blank. Falling back to /tmp'
+        echo '$TMPDIR appears to be blank. Falling back to /tmp'
 	    # ensure that it's really unset
 	    unset TMPDIR
     fi
