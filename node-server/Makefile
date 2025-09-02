@@ -12,7 +12,7 @@ ifeq "$(OSNAME)" "NetBSD"
         CFLAGS +=  -I/usr/pkg/include -L/usr/pkg/lib
 endif
 
-HEADERS = gm-node.h gm-node-config.h
+HEADERS = gm-node.h gm-node-config.h version.h
 MODULES = mqtt.c jobs.c controller.c gm-node.c
 
 GIT_VERSION := "$(shell git describe --dirty --always --tags)"
