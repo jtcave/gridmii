@@ -311,14 +311,14 @@ class Node:
         job = Job.new_job(output_message, self.node_name, output_filter, ctx)
         topic = f"{self.node_name}/submit/{job.jid}"
         logging.debug(f"publishing job {job.jid} to node...")
-        await mq_client.publish(topic, payload=command_string)
+        await mq_client.publish(topic, payload=command_string, qos=2)
         logging.debug(f"job {job.jid} published")
         return job
 
     async def reload(self, mq_client: aiomqtt.Client):
         """Instruct the node to reload its node server"""
         topic = f"{self.node_name}/reload"
-        await mq_client.publish(topic)
+        await mq_client.publish(topic, qos=2)
 
     async def eject(self, mq_client: aiomqtt.Client):
         """Eject this node from the grid, preventing further access and requesting that it exit.
@@ -329,7 +329,7 @@ class Node:
         self.table[self.node_name] = stub
         # tell the node to quit
         topic = f"{self.node_name}/exit"
-        await mq_client.publish(topic)
+        await mq_client.publish(topic, qos=2)
 
     def __str__(self):
         return self.node_name

@@ -130,7 +130,7 @@ class GridMiiBot(FlexBot):
                     self.broker_connected.set()
                     # subscribe to our topics
                     for topic in ("job/#", "node/#"):
-                        await self.mq_client.subscribe(topic)
+                        await self.mq_client.subscribe(topic, qos=2)
                     # send out a ping to enumerate the nodes
                     await self.ping_grid()
                     # handle messages
@@ -152,7 +152,7 @@ class GridMiiBot(FlexBot):
                     await self.target_channel.send(f":warning: wii messed up: {str(exc)}")
 
     async def ping_grid(self):
-        await self.mq_client.publish("grid/ping")
+        await self.mq_client.publish("grid/ping", qos=2)
 
     async def on_mqtt(self, msg: aiomqtt.Message):
         """MQTT message handler, called once per message"""

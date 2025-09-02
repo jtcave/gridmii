@@ -143,7 +143,7 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
         """Terminate all jobs across the entire grid"""
         logging.warning("scram command called")
         try:
-            await self.mq_client.publish("grid/scram")
+            await self.mq_client.publish("grid/scram", qos=2)
         except aiomqtt.MqttError as ex_mq:
             logging.exception("error publishing scram")
             await ctx.reply(f"**Couldn't send scram request**: {str(ex_mq)}")
@@ -193,7 +193,7 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
     @commands.command()
     async def rollcall(self, ctx: Context):
         """Force a roll call"""
-        await self.mq_client.publish("grid/roll_call")
+        await self.mq_client.publish("grid/roll_call", qos=2)
         await ctx.reply(":+1:")
 
 
@@ -275,6 +275,6 @@ class AutoRollCallCog(GridMiiCogBase):
     async def auto_roll_call(self):
         if self.mq_client:
             logging.info("performing roll call")
-            await self.mq_client.publish("grid/roll_call")
+            await self.mq_client.publish("grid/roll_call", qos=2)
 
 DEFAULT_COGS = (UserCommandCog, AdminCommandCog, JobControlCog, AutoRollCallCog)
