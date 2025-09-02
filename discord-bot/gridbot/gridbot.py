@@ -14,6 +14,7 @@ from .entity import Job, Node, UserPrefs
 from .grid_cmd import DEFAULT_COGS, JobControlCog
 from .neofetch import NeofetchCog
 from .cmd_denylist import permit_command
+from .get_version import GIT_VERSION
 
 
 ## discord part ##
@@ -72,6 +73,7 @@ class GridMiiBot(FlexBot):
         self.can_announce = False
 
     async def setup_hook(self) -> None:
+        logging.info(f"GridMii bot version {GIT_VERSION}")
         # Install the MQTT task.
         self.mqtt_task = self.loop.create_task(self.do_mqtt_task())
         # Install the "after broker connection" task"
