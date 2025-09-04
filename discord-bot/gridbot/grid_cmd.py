@@ -60,10 +60,12 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
         await ctx.reply(content=message)
 
     @commands.command()
-    async def locus(self, ctx: Context, new_locus: str|None=None):
+    async def locus(self, ctx: Context, target: str|None=None):
         """Manually set the locus node for new jobs"""
         prefs = UserPrefs.get_prefs(ctx.author)
-        if new_locus is None:
+        content = ""
+
+        if target is None:
             # query the current locus
             their_locus = prefs.locus
             if their_locus is None:
@@ -74,22 +76,20 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
                 content = f":warning: Commands are being sent to `{their_locus.node_name}`, but that node isn't present."
 
         else:
-            matches = Node.nodes_by_name(new_locus)
-            if len(matches) > 1:
-                content = f":question: `{new_locus}` matches multiple nodes!  Possible options:\n"
-                for node in matches:
-                    content += f"- `{node.node_name}`\n"
-
-                content += "\nPlease specify exactly one of the above nodes."
-
-            elif len(matches) == 1:
-                # set new locus
-                new_locus = matches[0].node_name
-                prefs.locus = new_locus
-                content = f":+1: Your commands will now run on `{new_locus}`"
-
-            else:
-                content = f":x: `{new_locus}` is not in the node table."
+            candidates = Node.nodes_by_name(target)
+            match candidates:
+                case []:
+                    # no match
+                    content = f":x: `{target}` is not in the node table."
+                case [new_locus]:
+                    # one match; set new locus
+                    prefs.locus = new_locus
+                    content = f":+1: Your commands will now run on `{new_locus}`"
+                case _:
+                    content = f":question: `{target}` matches multiple nodes!  Possible options:\n"
+                    for node in candidates:
+                        content += f"- `{node.node_name}`\n"
+                    content += "\nPlease specify exactly one of the above nodes."
 
         await ctx.reply(content)
 
@@ -156,32 +156,37 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
     @commands.command()
     async def reload(self, ctx: Context, node_name:str):
         """Instruct a node to reload its server (useful for updates)"""
-        nodes = Node.nodes_by_name(node_name)
-        if len(nodes) == 0:
-            await ctx.reply(f":x: node {node_name} is not in the node table")
-        elif len(nodes) > 1:
-            content = f":question: `{node_name}` matches multiple nodes!  Possible options:\n"
-            for node in nodes:
-                content += f"- `{node.node_name}`\n"
-
-            content += "\nPlease specify exactly one of the above nodes."
-            await ctx.reply(content)
-            return
-        elif len(nodes) == 1:
-            await nodes[0].reload(self.mq_client)
-            await ctx.reply(f":+1: Reloaded `{nodes[0].node_name}`")
+        candidates = Node.nodes_by_name(node_name)
+        match candidates:
+            case []:
+                await ctx.reply(f":x: node {node_name} is not in the node table")
+            case [node]:
+                await node.reload(self.mq_client)
+                await ctx.reply(f":+1: Reloaded `{node.node_name}`")
+            case _:
+                content = f":question: `{node_name}` matches multiple nodes!  Possible options:\n"
+                for node in candidates:
+                    content += f"- `{node.node_name}`\n"
+                content += "\nPlease specify exactly one of the above nodes."
+                await ctx.reply(content)
 
     @commands.command()
     async def eject(self, ctx: Context, node_name:str):
         """Eject a node from the grid.
         WARNING: if jobs are running, output will be lost"""
-        # TODO: use fuzzy match method
-        if Node.node_present(node_name):
-            node = Node.get_node(node_name)
-            await node.eject(self.mq_client)
-            await ctx.reply(":+1:")
-        else:
-            await ctx.reply(f"node {node_name} is not in the node table")
+        candidates = Node.nodes_by_name(node_name)
+        match candidates:
+            case []:
+                # no match
+                await ctx.reply(f":x: Node {node_name} is not present")
+            case [node]:
+                # unambiguous match
+                await node.eject(self.mq_client)
+                await ctx.reply(":+1:")
+            case _:
+                # ambiguous
+                names = ', '.join(n.node_name for n in candidates)
+                await ctx.reply(f":question: Ambiguous name could be: {names}")
 
 
     @commands.command()
