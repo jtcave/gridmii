@@ -10,7 +10,7 @@ from discord import Message
 from discord.ext.commands import errors, Context
 
 from .config import *
-from .entity import Job, Node, UserPrefs
+from .entity import Job, Node, UserPrefs, job_table, node_table
 from .grid_cmd import DEFAULT_COGS, JobControlCog
 from .neofetch import NeofetchCog
 from .cmd_denylist import permit_command
@@ -168,10 +168,10 @@ class GridMiiBot(FlexBot):
             # job status update
             _, jid, event = topic_path
             jid = int(jid)
-            if not Job.jid_present(jid):
+            if not job_table.jid_present(jid):
                 logging.warning(f"got message for spurious job {jid}")
                 return
-            job = Job.by_jid(jid)
+            job = job_table.by_jid(jid)
             match event:
                 case "stdout":
                     logging.debug(f"got job {jid} stdout: {msg.payload}")
@@ -197,7 +197,7 @@ class GridMiiBot(FlexBot):
                     await self.on_node_present(payload)
                 case "disconnect":
                     logging.info(f"node {payload} has left")
-                    Node.node_gone(payload)
+                    node_table.node_gone(payload)
                     await self.announce_node_gone(payload)
                 case "announce":
                     logging.info(f"node announcement: {payload}")
@@ -230,7 +230,7 @@ class GridMiiBot(FlexBot):
             node_version = None
 
         logging.info(f"node present: {node_name} version {node_version}")
-        Node.node_seen(node_name, node_version)
+        node_table.node_seen(node_name, node_version)
         if self.can_announce:
             await self.target_channel.send(f":inbox_tray: Node `{node_name}` is connected")
 
@@ -245,9 +245,9 @@ class GridMiiBot(FlexBot):
 
     async def on_roll_call_reply(self, node_name: str, job_list: list[int]):
         # set of jobs that belong to the node
-        node_jobs = {j for j in Job.each_job() if j.target_node == node_name}
+        node_jobs = {j for j in job_table.each_job() if j.target_node == node_name}
         # known good jobs
-        job_set = {Job.by_jid(jid) for jid in job_list if Job.jid_present(jid)}
+        job_set = {job_table.by_jid(jid) for jid in job_list if job_table.jid_present(jid)}
         # jobs that belong to the node, but are not known good and hence should be abandoned
         bad_jobs = node_jobs - job_set
         for j in bad_jobs:
@@ -273,7 +273,7 @@ class GridMiiBot(FlexBot):
         node = UserPrefs.get_locus(ctx.author)
         if node is None or not node.is_present:
             # locus isn't there, so use our pick logic
-            node = Node.pick_node()
+            node = node_table.pick_node()
             if node is None:
                 await ctx.message.reply(":x: No nodes are available at the moment.")
                 return

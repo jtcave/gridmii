@@ -53,8 +53,8 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
     @commands.command()
     async def nodes(self, ctx: Context):
         """View available nodes"""
-        if Node.has_nodes():
-            message = '\n'.join(f"* {n}" for n in Node.each_node())
+        if node_table.has_nodes():
+            message = '\n'.join(f"* {n}" for n in node_table.each_node())
         else:
             message = "No nodes are online"
         await ctx.reply(content=message)
@@ -76,7 +76,7 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
                 content = f":warning: Commands are being sent to `{their_locus.node_name}`, but that node isn't present."
 
         else:
-            candidates = Node.nodes_by_name(target)
+            candidates = node_table.nodes_by_name(target)
             match candidates:
                 case []:
                     # no match
@@ -110,8 +110,8 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
             # do the thing
             return f"* #{job.jid}, started by **{name}**, on `{job.target_node}`, running for **{elapsed}**, see {job.output_message.jump_url}"
 
-        if Job.has_jobs():
-            table = '\n'.join(_line(j) for j in Job.each_job())
+        if job_table.has_jobs():
+            table = '\n'.join(_line(j) for j in job_table.each_job())
         else:
             table = "No jobs running"
         await ctx.message.reply(table)
@@ -156,7 +156,7 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
     @commands.command()
     async def reload(self, ctx: Context, node_name:str):
         """Instruct a node to reload its server (useful for updates)"""
-        candidates = Node.nodes_by_name(node_name)
+        candidates = node_table.nodes_by_name(node_name)
         match candidates:
             case []:
                 await ctx.reply(f":x: node {node_name} is not in the node table")
@@ -174,7 +174,7 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
     async def eject(self, ctx: Context, node_name:str):
         """Eject a node from the grid.
         WARNING: if jobs are running, output will be lost"""
-        candidates = Node.nodes_by_name(node_name)
+        candidates = node_table.nodes_by_name(node_name)
         match candidates:
             case []:
                 # no match
@@ -193,10 +193,10 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
     async def abandon(self, ctx: Context, jid:int):
         """Immediately flush the output of the specified job and remove it from the job table"""
         # This is an admin-only command now because it could lead to data loss if misused
-        if not Job.jid_present(jid):
+        if not job_table.jid_present(jid):
             await ctx.reply(f":x: job #{jid} is not in the job table")
             return
-        job = Job.by_jid(jid)
+        job = job_table.by_jid(jid)
         await job.abandon(self.mq_client)
         await ctx.reply(f":+1: see {job.output_message.jump_url}")
 
@@ -222,7 +222,7 @@ class JobControlCog(GridMiiCogBase, name="Job Control"):
             return None
         replied_msg_id = msg.reference.message_id
         # scan for messages
-        for job in Job.each_job():
+        for job in job_table.each_job():
             if job.output_message.id == replied_msg_id:
                 return job
         # no message
