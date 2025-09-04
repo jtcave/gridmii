@@ -68,6 +68,7 @@ void init_job(struct job *jobspec) {
     jobspec->exit_stat = 0;
     jobspec->on_write = on_write_nothing;
     jobspec->stdout_sent = 0;
+    jobspec->pollfd_idx = 0;
     memset(jobspec->temp_path, 0, gm_config.tmp_name_size);
 }
 
@@ -79,7 +80,7 @@ void init_job_table() {
 
 // Start a job, including the process it monitors
 int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write, char *const *argv) {
-    int rv;
+    int rv, basefd;
 
     // reject null callback
     if (on_write == NULL) {
@@ -91,6 +92,7 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write, char *
         return EFAULT;
     }
 
+    basefd = jobspec->pollfd_idx;
     jobspec->job_id = job_id;
     jobspec->on_write = on_write;
 
@@ -102,6 +104,9 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write, char *
         return rv;
     }
     jobspec->job_stdout = stdout_pipe[0];
+    pollfds[basefd].fd = stdout_pipe[0];
+    pollfds[basefd].events = POLLIN;
+    pollfds[basefd].revents = 0;
 
     if (pipe(stderr_pipe) != 0) {
         rv = errno;
@@ -109,6 +114,9 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write, char *
         return rv;
     }
     jobspec->job_stderr = stderr_pipe[0];
+    pollfds[basefd + 1].fd = stderr_pipe[0];
+    pollfds[basefd + 1].events = POLLIN;
+    pollfds[basefd + 1].revents = 0;
 
     if (pipe(stdin_pipe) != 0) {
         rv = errno;
@@ -116,7 +124,7 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write, char *
         return rv;
     }
     jobspec->job_stdin = stdin_pipe[1];
-    
+
     // we do NOT want to block when writing to the job's stdin
     rv = fcntl(stdin_pipe[1], F_SETFL, O_NONBLOCK);
     if (rv == -1) {
@@ -210,7 +218,7 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write, char *
         // exec the new process
         extern char **environ;
         execve(argv[0], argv, environ);
-        
+
         // exec failed, break the bad news
         err(SPAWN_FAILURE, "could not exeve new process");
     }
@@ -268,40 +276,24 @@ void job_rm_temp(struct job *jobspec) {
 }
 
 // Monitor job output
-void poll_job_output(struct job *jobspec) {
+void handle_job_output(struct job *jobspec) {
     // buffer for reads
     char buffer[BUFFER_SIZE];
     int read_count;
+    int basefd = jobspec->pollfd_idx;
 
-    // assemble poll array for job stdout and stderr
-    // TODO: shouldn't this just be done once and stored in the job table?
-    struct pollfd polls[2];
-    polls[0].fd = jobspec->job_stdout;
-    polls[1].fd = jobspec->job_stderr;
-    polls[0].events = polls[1].events = POLLIN;
+    // we might be able to do some reads, check our fds
 
-    // poll for input
-    int ready = poll(polls, 2, DELAY_MS);
-    if (ready == -1) {
-        // we can just swallow EINTR and EAGAIN
-        if (errno == EFAULT || errno == EINVAL) {
-            err(1, "could not poll for job output");
-        }
-    }
-    else if (ready > 0) {
-        // we might be able to do some reads, check our fds
-
-        for (int i = 0; i <= 1; i++) {
-            if (polls[i].revents & (POLLIN|POLLHUP)) {
-                read_count = read(polls[i].fd, buffer, BUFFER_SIZE);
-                if (read_count == -1) {
-                    warn("error reading from job pipe");
-                }
-                jobspec->on_write(jobspec, polls[i].fd, buffer, read_count);
-                if (read_count == 0) {
-                    // EOF
-                    close_job_fd(jobspec, polls[i].fd);
-                }
+    for (int i = 0; i <= 1; i++) {
+        if (pollfds[basefd + i].revents & (POLLIN|POLLHUP)) {
+            read_count = read(pollfds[basefd + i].fd, buffer, BUFFER_SIZE);
+            if (read_count == -1) {
+                warn("error reading from job pipe");
+            }
+            jobspec->on_write(jobspec, pollfds[basefd + i].fd, buffer, read_count);
+            if (read_count == 0) {
+                // EOF
+                close_job_fd(jobspec, pollfds[basefd + i].fd);
             }
         }
     }
@@ -355,15 +347,12 @@ bool job_active(struct job *jobspec) {
 }
 
 
-// Process events for all entries in the job table
-void do_job_events() {
-    for (int i = 0; i < MAX_JOBS; i++) {
-        struct job *jobspec = &job_table[i];
-        if (job_active(jobspec)) {
-            poll_job_output(jobspec);
-            check_job_subprocess(jobspec);
-            collect_job(jobspec);
-        }
+// Process events for a given job
+void do_job_events(struct job *jobspec) {
+    if (job_active(jobspec)) {
+        handle_job_output(jobspec);
+        check_job_subprocess(jobspec);
+        collect_job(jobspec);
     }
 }
 
@@ -374,6 +363,7 @@ struct job *empty_job_slot() {
         struct job *jobspec = &job_table[i];
         if (!job_active(jobspec)) {
             init_job(jobspec);
+            jobspec->pollfd_idx = 1 + (i * 2);
             return jobspec;
         }
     }
@@ -462,7 +452,7 @@ void job_roll_call() {
             json_array_append(job_array, j_jid);
         }
     }
-    
+
     // publish message
     int rv = gm_publish_json(root, "node/roll_call", 2, false);
     if (rv != MOSQ_ERR_SUCCESS) {
@@ -496,7 +486,7 @@ int submit_job(jid_t jid, write_callback on_write, const char *command) {
     }
     // stash path to script
     memcpy(jobspec->temp_path, path, gm_config.tmp_name_size);
-    
+
     // actually launch the job
     int spawn_code = spawn_job(jobspec, jid, on_write, argv);
     fprintf(stderr, "spawn_job() for jid %d returned %d\n", jid, spawn_code);
@@ -565,12 +555,12 @@ int job_signal(jid_t jid, int signum) {
         return EDOM;    // "numerical argument out of range"
                         // not a possible kill(2) error
     }
-    
+
     // send the signal to the whole process group
     // sending SIGINT to just the shell doesn't seem to work
     int rv;
     rv = killpg(job_pid, signum);
-    
+
     if (rv == -1) {
         return errno;
     }

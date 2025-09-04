@@ -14,6 +14,7 @@
 #include <mosquitto.h>
 
 #include "gm-node.h"
+#include "gm-node-config.h"
 
 // vscode sucks
 #ifndef __USE_POSIX
@@ -23,6 +24,9 @@
 
 // global configuration table
 struct gm_config_data gm_config;
+
+// global pollfds
+struct pollfd pollfds[1 + (MAX_JOBS * 2)];
 
 // flag that suppresses our atexit function in the child process
 bool gm_in_child = false;
@@ -47,10 +51,10 @@ const char *default_node_name() {
 void init_config(int argc, char *const *argv) {
     gm_config.argc = argc;
     gm_config.argv = argv;
-    
+
     char *env_host = getenv("GRID_HOST");
     gm_config.grid_host = (env_host ? env_host : GRID_HOST_DEFAULT);
-    
+
     char *env_port = getenv("GRID_PORT");
     gm_config.grid_port = (env_port ? atoi(env_port) : GRID_PORT_DEFAULT);
 
@@ -65,13 +69,13 @@ void init_config(int argc, char *const *argv) {
 
     char *env_node_name = getenv("GRID_NODE_NAME");
     gm_config.node_name = (env_node_name ? env_node_name : default_node_name());
-    
+
     char *env_job_cwd = getenv("GRID_JOB_CWD");
     char *env_home = getenv("HOME");
     gm_config.job_cwd = (env_job_cwd ? env_job_cwd :
         (env_home ? env_home :
             "/"));
-    
+
     char *env_job_shell = getenv("GRID_JOB_SHELL");
     gm_config.job_shell = env_job_shell ? env_job_shell : "/bin/sh";
 
@@ -163,7 +167,40 @@ int main(int argc, char *const *argv) {
     gm_init_mqtt();
     gm_connect_mqtt();
     for(;;) {
-        do_mqtt_events();
-        do_job_events();
+        // only poll for write if there's something that needs written
+        if (mosquitto_want_write(gm_mosq)) {
+            pollfds[0].events = POLLIN | POLLOUT;
+        }
+        else {
+            pollfds[0].events = POLLIN;
+        }
+        // XXX: probably should just keep track of this,
+        // rather than needing to calculate it every time,
+        // for free performance...
+        int activeJobs = 0;
+        for (int i = 0; i < MAX_JOBS; i++) {
+            if (job_active(&job_table[i])) {
+                activeJobs++;
+            }
+        }
+        for (int i = 0; i < 1 + (MAX_JOBS * 2); i++) {
+            // clear stale / uninitialized data so do_job_events() can't possibly read nonsense
+            pollfds[i].revents = 0;
+        }
+        int rv = poll(pollfds, 1 + (activeJobs * 2), DELAY_MS);
+        if (rv == -1) {
+            if (errno == EINTR || errno == EAGAIN) {
+                // just try again later
+                continue;
+            }
+            else {
+                err(1, "could not poll()");
+            }
+        }
+        gm_process_mqtt(pollfds[0].revents);
+
+        for (int i = 0; i < MAX_JOBS; i++) {
+            do_job_events(&job_table[i]);
+        }
     }
 }

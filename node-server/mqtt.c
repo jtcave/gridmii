@@ -12,6 +12,7 @@
 
 #include <mosquitto.h>
 
+#include "gm-node-config.h"
 #include "gm-node.h"
 
 // global mosquitto object
@@ -69,7 +70,6 @@ struct mosquitto *gm_init_mqtt(void) {
     mosquitto_message_callback_set(gm_mosq, has_message);
     mosquitto_disconnect_callback_set(gm_mosq, has_disconnected);
 
-    
     // declare last will of client
     rv = mosquitto_will_set(gm_mosq, "node/disconnect", strlen(client_name), client_name, 1, false);
     if (rv != MOSQ_ERR_SUCCESS) {
@@ -107,6 +107,15 @@ void gm_connect_mqtt() {
     }
 
     subscribe_topics();
+
+    // init 1st pollfd (can't happen in init, must be connected first)
+    int fd = mosquitto_socket(gm_mosq);
+    if (fd < 0) {
+        err(1, "could not get socket from mosquitto object");
+    }
+    pollfds[0].fd = fd;
+    pollfds[0].events = POLLIN;
+
 }
 
 // Subscribe to all topics relevant to a node.
@@ -189,7 +198,7 @@ void has_disconnected(struct mosquitto *mosq, void *obj, int reason) {
     if (reason != 0) {
         attempt_reconnect();
     }
-    
+
 }
 
 // Reconnect to MQTT with exponential backoff
@@ -220,37 +229,6 @@ void attempt_reconnect(void) {
     }
 
     subscribe_topics();
-}
-
-// pump one cycle of the mosquitto message loop
-void do_mqtt_events() {
-    int fd = mosquitto_socket(gm_mosq);
-    if (fd == -1) {
-        err(1, "could not get socket from mosquitto object");
-    }
-
-    struct pollfd pfd;
-    pfd.fd = fd;
-    pfd.events = POLLIN;
-
-    // only poll for write if there's something that needs written
-    if (mosquitto_want_write(gm_mosq)) {
-        pfd.events = POLLIN | POLLOUT;
-    }
-    else {
-        pfd.events = POLLIN;
-    }
-    int rv = poll(&pfd, 1, DELAY_MS);
-    if (rv == -1) {
-        if (errno == EINTR || errno == EAGAIN) {
-            // just try again later
-            return;
-        }
-        else {
-            err(1, "could not poll()");
-        }
-    }
-    gm_process_mqtt(pfd.revents);
 }
 
 // Announce the node's existence to the grid
@@ -293,7 +271,7 @@ int gm_publish_json(json_t *js, const char *topic, int qos, bool retain) {
 
 // Disconnect from the broker and free resources
 void gm_disconnect() {
-    // Send disconect message 
+    // Send disconect message
     int rv = mosquitto_publish(gm_mosq, NULL, "node/disconnect", strlen(gm_config.node_name), gm_config.node_name, 1, false);
     if (rv != MOSQ_ERR_SUCCESS) {
         // we're shutting down anyway, may as well warn instead of err
