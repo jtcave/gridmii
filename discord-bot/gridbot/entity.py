@@ -1,5 +1,6 @@
 import os
 import io
+import typing
 from typing import Self
 import asyncio
 import logging
@@ -37,7 +38,7 @@ class Job:
     contents of that buffer. Standard output/error writes from the job will
     update the output buffer."""
 
-    table: dict[int, Self] = {}
+    _table: dict[int, Self] = {}
 
     # this magic number is the mas number of characters a Discord message can have (without a Nitro sub)
     MESSAGE_LIMIT = 2000
@@ -63,8 +64,28 @@ class Job:
         cls.last_jid += 1
         jid = cls.last_jid
         new_job_entry = cls(jid, output_message, target_node_name, output_filter, ctx)
-        cls.table[jid] = new_job_entry
+        cls._table[jid] = new_job_entry
         return new_job_entry
+
+    @classmethod
+    def jid_present(cls, jid: int) -> bool:
+        """True if there is a job with that jid in the job table"""
+        return jid in cls._table
+
+    @classmethod
+    def by_jid(cls, jid: int) -> Self:
+        """Returns the job with the given jid, or throws KeyError if there is no such job"""
+        return cls._table[jid]
+
+    @classmethod
+    def each_job(cls) -> typing.Iterator[Self]:
+        """Returns an iterator over the jobs in the job table"""
+        return iter(cls._table.values())
+
+    @classmethod
+    def has_jobs(cls) -> bool:
+        """True if any jobs are present in the table"""
+        return bool(cls._table)
 
     def buffer_contents(self) -> str:
         """Return the contents of the output buffer."""
@@ -82,7 +103,7 @@ class Job:
         content = f"**Could not start job:** `{error.decode(errors="replace")}`"
         await self.output_message.edit(content=content)
         self.started = True     # don't let the clean_if_unstarted task fire
-        del self.table[self.jid]
+        del self._table[self.jid]
 
     async def clean_if_unstarted(self, delay=20.0):
         """A task that will terminate jobs that did not start in a reasonable amount of time.
@@ -93,7 +114,7 @@ class Job:
         if not self.started:
             logging.warning(f"job {self.jid} did not start on node {self.target_node}")
             await self.output_message.edit(content=":x: Your job did not start. The node might not be online.")
-            del self.table[self.jid]
+            del self._table[self.jid]
 
 
     async def write(self, data: bytes):
@@ -178,7 +199,7 @@ class Job:
                 return
         await self.output_message.edit(content=content)
         self.output_buffer.close()
-        del Job.table[self.jid]
+        del self._table[self.jid]
 
     def tail(self, lines: int) -> list[str]:
         """Return the last few lines of job output"""
@@ -231,12 +252,17 @@ class RefusedJob(Job):
 class Node:
     """Represents a node in the grid"""
 
-    table: dict[str, Self] = {}
-    locus: str|None = TARGET_NODE
+    _table: dict[str, Self] = {}
+    _locus: str | None = TARGET_NODE
 
     def __init__(self, node_name: str, node_version: str|None = None):
         self.node_name = node_name
         self.version = node_version
+
+    @classmethod
+    def get_node(cls, node_name: str) -> Self:
+        """Return the node with the exact name given, or throw KeyError"""
+        return cls._table[node_name]
 
     @classmethod
     def nodes_by_name(cls, node_name: str) -> list[Self]:
@@ -246,7 +272,7 @@ class Node:
         If 0 matches are returned, the caller is expected to complain that the node doesn't exist.
         """
         matches = list()
-        for node in cls.table.values():
+        for node in cls._table.values():
             if node.node_name == node_name:
                 # exact match, return it
                 # we can't have 2 nodes w/ the exact same name anyways, so it's pointless
@@ -260,37 +286,52 @@ class Node:
         return matches
 
     @classmethod
+    def node_present(cls, node_name: str) -> bool:
+        """True if the node with that exact name is present in the table"""
+        return node_name in cls._table
+
+    @classmethod
+    def has_nodes(cls) -> bool:
+        """True if there are nay nodes in the table"""
+        return bool(cls._table)
+
+    @classmethod
+    def each_node(cls) -> typing.Iterator[Self]:
+        """Returns an iterator over all present nodes"""
+        return iter(cls._table.values())
+
+    @classmethod
     def pick_node(cls) -> Self|None:
         """Select a node that can accept a job. If there are no available nodes, return None"""
         # Our first crude node selector logic:
         # * Prefer the last node used
         # * If that node is gone, pick a node that can accept jobs
-        if cls.locus in cls.table:
-            return cls.table[cls.locus]
+        if cls._locus in cls._table:
+            return cls._table[cls._locus]
         else:
-            for node in cls.table.values():
+            for node in cls._table.values():
                 if node.can_accept_jobs():
-                    cls.locus = node.node_name
+                    cls._locus = node.node_name
                     return node
             return None
 
     @classmethod
     def node_seen(cls, node_name: str, node_version:str|None = None) -> Self:
         """Register the presence of the node with the given name, ensuring its presence in the table"""
-        if node_name not in cls.table:
+        if node_name not in cls._table:
             node = cls(node_name, node_version)
-            cls.table[node_name] = node
+            cls._table[node_name] = node
         else:
-            node = cls.table[node_name]
-            cls.table[node_name].touch()
+            node = cls._table[node_name]
+            cls._table[node_name].touch()
             node.version = node_version
         return node
 
     @classmethod
     def node_gone(cls, node_name: str):
         """Remove the node with the given name from the table."""
-        if node_name in cls.table:
-            del cls.table[node_name]
+        if node_name in cls._table:
+            del cls._table[node_name]
 
     def touch(self):
         """Called when a node already in the table responds to a ping"""
@@ -299,7 +340,7 @@ class Node:
     @property
     def is_present(self):
         """True iff the node is present in the node table"""
-        return self.node_name in self.table
+        return self.node_name in self._table
 
     def can_accept_jobs(self):
         # stub for now
@@ -330,7 +371,7 @@ class Node:
         logging.info(f"ejecting node {self.node_name}")
         # put a node stub into the job table
         stub = EjectedNode.from_node(self)
-        self.table[self.node_name] = stub
+        self._table[self.node_name] = stub
         # tell the node to quit
         topic = f"{self.node_name}/exit"
         await mq_client.publish(topic, qos=2)
@@ -378,7 +419,10 @@ class UserPrefs:
     @property
     def locus(self) -> Node|None:
         """The locus is the node the user prefers"""
-        return Node.table.get(self._locus, None)
+        if self._locus and Node.node_present(self._locus):
+            return Node.get_node(self._locus)
+        else:
+            return None
 
     @locus.setter
     def locus(self, new_locus: Node|str|None):

@@ -168,10 +168,10 @@ class GridMiiBot(FlexBot):
             # job status update
             _, jid, event = topic_path
             jid = int(jid)
-            if jid not in Job.table:
+            if not Job.jid_present(jid):
                 logging.warning(f"got message for spurious job {jid}")
                 return
-            job = Job.table[jid]
+            job = Job.by_jid(jid)
             match event:
                 case "stdout":
                     logging.debug(f"got job {jid} stdout: {msg.payload}")
@@ -245,9 +245,9 @@ class GridMiiBot(FlexBot):
 
     async def on_roll_call_reply(self, node_name: str, job_list: list[int]):
         # set of jobs that belong to the node
-        node_jobs = {j for j in Job.table.values() if j.target_node == node_name}
+        node_jobs = {j for j in Job.each_job() if j.target_node == node_name}
         # known good jobs
-        job_set = {Job.table[jid] for jid in job_list if jid in Job.table}
+        job_set = {Job.by_jid(jid) for jid in job_list if Job.jid_present(jid)}
         # jobs that belong to the node, but are not known good and hence should be abandoned
         bad_jobs = node_jobs - job_set
         for j in bad_jobs:

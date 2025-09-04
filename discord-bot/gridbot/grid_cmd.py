@@ -53,7 +53,10 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
     @commands.command()
     async def nodes(self, ctx: Context):
         """View available nodes"""
-        message = '\n'.join(f"* {n}" for n in Node.table.values()) if Node.table else "No nodes are online"
+        if Node.has_nodes():
+            message = '\n'.join(f"* {n}" for n in Node.each_node())
+        else:
+            message = "No nodes are online"
         await ctx.reply(content=message)
 
     @commands.command()
@@ -107,8 +110,8 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
             # do the thing
             return f"* #{job.jid}, started by **{name}**, on `{job.target_node}`, running for **{elapsed}**, see {job.output_message.jump_url}"
 
-        if Job.table:
-            table = '\n'.join(_line(j) for j in Job.table.values())
+        if Job.has_jobs():
+            table = '\n'.join(_line(j) for j in Job.each_job())
         else:
             table = "No jobs running"
         await ctx.message.reply(table)
@@ -172,21 +175,23 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
     async def eject(self, ctx: Context, node_name:str):
         """Eject a node from the grid.
         WARNING: if jobs are running, output will be lost"""
-        node = Node.table.get(node_name, None)
-        if node is None:
-            await ctx.reply(f"node {node_name} is not in the node table")
-        else:
+        # TODO: use fuzzy match method
+        if Node.node_present(node_name):
+            node = Node.get_node(node_name)
             await node.eject(self.mq_client)
             await ctx.reply(":+1:")
+        else:
+            await ctx.reply(f"node {node_name} is not in the node table")
+
 
     @commands.command()
     async def abandon(self, ctx: Context, jid:int):
         """Immediately flush the output of the specified job and remove it from the job table"""
         # This is an admin-only command now because it could lead to data loss if misused
-        if jid not in Job.table:
+        if not Job.jid_present(jid):
             await ctx.reply(f":x: job #{jid} is not in the job table")
             return
-        job = Job.table[jid]
+        job = Job.by_jid(jid)
         await job.abandon(self.mq_client)
         await ctx.reply(f":+1: see {job.output_message.jump_url}")
 
@@ -212,7 +217,7 @@ class JobControlCog(GridMiiCogBase, name="Job Control"):
             return None
         replied_msg_id = msg.reference.message_id
         # scan for messages
-        for job in Job.table.values():
+        for job in Job.each_job():
             if job.output_message.id == replied_msg_id:
                 return job
         # no message
