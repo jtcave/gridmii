@@ -43,10 +43,10 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
         """Check connectivity to broker"""
         # noinspection PyProtectedMember
         if self.mq_client is None:
-            await ctx.send(":-1: mq_client is None")
+            await ctx.reply(":-1: mq_client is None")
         elif self.mq_client._disconnected.done():
             # XXX: aiomqtt doesn't seem to expose this in a saner way
-            await ctx.send(":-1: mq_client._disconnected has come to pass")
+            await ctx.reply(":-1: mq_client._disconnected has come to pass")
         else:
             await ctx.reply(":+1:")
 
@@ -57,7 +57,7 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
             message = '\n'.join(f"* {n}" for n in node_table.each_node())
         else:
             message = "No nodes are online"
-        await ctx.reply(content=message)
+        await ctx.reply(message)
 
     @commands.command()
     async def locus(self, ctx: Context, target: str|None=None):
@@ -114,7 +114,7 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
             table = '\n'.join(_line(j) for j in job_table.each_job())
         else:
             table = "No jobs running"
-        await ctx.message.reply(table)
+        await ctx.reply(table)
 
     @commands.command()
     async def rules(self, ctx: Context):
