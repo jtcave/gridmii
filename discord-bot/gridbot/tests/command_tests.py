@@ -3,23 +3,7 @@ import unittest.mock as mock
 
 from ..grid_cmd import UserCommandCog, GridMiiCogBase
 from ..entity import NodeTable, JobTable
-
-
-# simulacra
-
-def mock_mqtt():
-    mqttoid = mock.AsyncMock()
-    # emulate the innards we reach into
-    mqttoid._disconnected.done = lambda: False
-    return mqttoid
-
-def mock_bot():
-    botoid = mock.Mock()
-    botoid.mq_client = mock_mqtt()
-    return botoid
-
-def mock_context():
-    return mock.AsyncMock()
+from .simulacra import *
 
 class UserCommandTest(unittest.IsolatedAsyncioTestCase):
     def cog(self):
