@@ -184,11 +184,9 @@ class Job:
         return f"<Job: jid=#{self.jid} node='{self.target_node}'>"
 
 class JobTable:
-        # The bot is responsible for issuing JIDs. Keep track of the last JID issued.
-        _last_jid: int = 0
-
         def __init__(self):
             self._table: dict[int, Job] = {}
+            self._last_jid = 0
 
         def new_job(self, output_message: discord.Message, target_node_name: str, output_filter=filter_backticks,
                     ctx: Context | None = None) -> Job:
@@ -207,9 +205,8 @@ class JobTable:
             """Returns the job with the given jid, or throws KeyError if there is no such job"""
             return self._table[jid]
 
-        def each_job(self) -> typing.Iterator[Job]:
+        def __iter__(self):
             """Returns an iterator over the jobs in the job table"""
-            # TODO: make this an __iter__ implementation
             return iter(self._table.values())
 
         def has_jobs(self) -> bool:

@@ -111,7 +111,7 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
             return f"* #{job.jid}, started by **{name}**, on `{job.target_node}`, running for **{elapsed}**, see {job.output_message.jump_url}"
 
         if job_table.has_jobs():
-            table = '\n'.join(_line(j) for j in job_table.each_job())
+            table = '\n'.join(_line(j) for j in job_table)
         else:
             table = "No jobs running"
         await ctx.reply(table)
@@ -222,7 +222,7 @@ class JobControlCog(GridMiiCogBase, name="Job Control"):
             return None
         replied_msg_id = msg.reference.message_id
         # scan for messages
-        for job in job_table.each_job():
+        for job in job_table:
             if job.output_message.id == replied_msg_id:
                 return job
         # no message

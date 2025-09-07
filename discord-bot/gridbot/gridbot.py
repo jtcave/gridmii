@@ -245,7 +245,7 @@ class GridMiiBot(FlexBot):
 
     async def on_roll_call_reply(self, node_name: str, job_list: list[int]):
         # set of jobs that belong to the node
-        node_jobs = {j for j in job_table.each_job() if j.target_node == node_name}
+        node_jobs = {j for j in job_table if j.target_node == node_name}
         # known good jobs
         job_set = {job_table.by_jid(jid) for jid in job_list if job_table.jid_present(jid)}
         # jobs that belong to the node, but are not known good and hence should be abandoned
