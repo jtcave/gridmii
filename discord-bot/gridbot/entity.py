@@ -356,7 +356,7 @@ class NodeTable:
         """True if there are nay nodes in the table"""
         return bool(self._table)
 
-    def each_node(self) -> typing.Iterator[Node]:
+    def __iter__(self):
         """Returns an iterator over all present nodes"""
         return iter(self._table.values())
 
