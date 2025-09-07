@@ -184,42 +184,37 @@ class Job:
         return f"<Job: jid=#{self.jid} node='{self.target_node}'>"
 
 class JobTable:
-        # the actual table
-        _table = {}
-
         # The bot is responsible for issuing JIDs. Keep track of the last JID issued.
         _last_jid: int = 0
 
-        @classmethod
-        def new_job(cls, output_message: discord.Message, target_node_name: str, output_filter=filter_backticks,
+        def __init__(self):
+            self._table: dict[int, Job] = {}
+
+        def new_job(self, output_message: discord.Message, target_node_name: str, output_filter=filter_backticks,
                     ctx: Context | None = None) -> Job:
             """Create fresh job object tied to an output message"""
-            cls._last_jid += 1
-            jid = cls._last_jid
+            self._last_jid += 1
+            jid = self._last_jid
             new_job_entry = Job(jid, output_message, target_node_name, output_filter, ctx)
-            cls._table[jid] = new_job_entry
+            self._table[jid] = new_job_entry
             return new_job_entry
 
-        @classmethod
-        def jid_present(cls, jid: int) -> bool:
+        def jid_present(self, jid: int) -> bool:
             """True if there is a job with that jid in the job table"""
-            return jid in cls._table
+            return jid in self._table
 
-        @classmethod
-        def by_jid(cls, jid: int) -> Job:
+        def by_jid(self, jid: int) -> Job:
             """Returns the job with the given jid, or throws KeyError if there is no such job"""
-            return cls._table[jid]
+            return self._table[jid]
 
-        @classmethod
-        def each_job(cls) -> typing.Iterator[Job]:
+        def each_job(self) -> typing.Iterator[Job]:
             """Returns an iterator over the jobs in the job table"""
             # TODO: make this an __iter__ implementation
-            return iter(cls._table.values())
+            return iter(self._table.values())
 
-        @classmethod
-        def has_jobs(cls) -> bool:
+        def has_jobs(self) -> bool:
             """True if any jobs are present in the table"""
-            return bool(cls._table)
+            return bool(self._table)
 
 job_table = JobTable()
 
@@ -330,24 +325,24 @@ class EjectedNode(Node):
         return RefusedJob(-1, output_message, self.node_name, output_filter)
 
 class NodeTable:
-    _table = {}
 
     _locus: str | None = TARGET_NODE
 
-    @classmethod
-    def get_node(cls, node_name: str) -> Node:
-        """Return the node with the exact name given, or throw KeyError"""
-        return cls._table[node_name]
+    def __init__(self):
+        self._table: dict[str, Node] = {}
 
-    @classmethod
-    def nodes_by_name(cls, node_name: str) -> list[Node]:
+    def get_node(self, node_name: str) -> Node:
+        """Return the node with the exact name given, or throw KeyError"""
+        return self._table[node_name]
+
+    def nodes_by_name(self, node_name: str) -> list[Node]:
         """
         Check if we know this node (case-insensitive) by name - return all matches found.
         If more than 1 match is returned, the caller is expected to ask the user for clarification.
         If 0 matches are returned, the caller is expected to complain that the node doesn't exist.
         """
         matches = list()
-        for node in cls._table.values():
+        for node in self._table.values():
             if node.node_name == node_name:
                 # exact match, finish the search
                 return [node]
@@ -356,53 +351,47 @@ class NodeTable:
                 matches.append(node)
         return matches
 
-    @classmethod
-    def node_present(cls, node_name: str) -> bool:
+    def node_present(self, node_name: str) -> bool:
         """True if the node with that exact name is present in the table"""
-        return node_name in cls._table
+        return node_name in self._table
 
-    @classmethod
-    def has_nodes(cls) -> bool:
+    def has_nodes(self) -> bool:
         """True if there are nay nodes in the table"""
-        return bool(cls._table)
+        return bool(self._table)
 
-    @classmethod
-    def each_node(cls) -> typing.Iterator[Node]:
+    def each_node(self) -> typing.Iterator[Node]:
         """Returns an iterator over all present nodes"""
-        return iter(cls._table.values())
+        return iter(self._table.values())
 
-    @classmethod
-    def pick_node(cls) -> Node|None:
+    def pick_node(self) -> Node | None:
         """Select a node that can accept a job. If there are no available nodes, return None"""
         # Our first crude node selector logic:
         # * Prefer the last node used
         # * If that node is gone, pick a node that can accept jobs
-        if cls._locus in cls._table:
-            return cls._table[cls._locus]
+        if self._locus in self._table:
+            return self._table[self._locus]
         else:
-            for node in cls._table.values():
+            for node in self._table.values():
                 if node.can_accept_jobs():
-                    cls._locus = node.node_name
+                    self._locus = node.node_name
                     return node
             return None
 
-    @classmethod
-    def node_seen(cls, node_name: str, node_version:str|None = None) -> Node:
+    def node_seen(self, node_name: str, node_version: str | None = None) -> Node:
         """Register the presence of the node with the given name, ensuring its presence in the table"""
-        if node_name not in cls._table:
+        if node_name not in self._table:
             node = Node(node_name, node_version)
-            cls._table[node_name] = node
+            self._table[node_name] = node
         else:
-            node = cls._table[node_name]
-            cls._table[node_name].touch()
+            node = self._table[node_name]
+            self._table[node_name].touch()
             node.version = node_version
         return node
 
-    @classmethod
-    def node_gone(cls, node_name: str):
+    def node_gone(self, node_name: str):
         """Remove the node with the given name from the table."""
-        if node_name in cls._table:
-            del cls._table[node_name]
+        if node_name in self._table:
+            del self._table[node_name]
 node_table = NodeTable()
 
 ## map discord users to preferences
