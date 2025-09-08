@@ -21,6 +21,5 @@ class Config:
             cls.MQTT_TLS = config.get("mqtt_tls", False)
             cls.MQTT_USERNAME = config.get("mqtt_username", "")
             cls.MQTT_PASSWORD = config.get("mqtt_password", "")
-            cls.TARGET_NODE = config.get("target_node", None)
             cls.NOTIFY_LIMIT = config.get("notify_limit", 60)
             cls.MIN_REPORT_SEC = config.get("min_report_sec", 1)

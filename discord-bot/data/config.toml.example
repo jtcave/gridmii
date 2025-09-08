@@ -35,10 +35,6 @@ mqtt_username = "epic_user"
 # Default: ""
 mqtt_password = "alpine"
 
-# Optional - Default target node
-# Default: None
-target_node = "my_epic_node_name_here"
-
 # Optional - Minimum limit, in seconds, to ping a user when
 #            an ongoing job finishes (successful or not)
 # Default: 60
