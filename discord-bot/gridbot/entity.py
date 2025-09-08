@@ -48,7 +48,7 @@ class Job:
         self.notified = False
         self.will_attach = False
         self.started = False
-        self.start_time = None
+        self.start_time = time.monotonic()
         self.target_node = target_node_name
         self.filter = output_filter if output_filter else (lambda x: x)
         self.ctx = ctx

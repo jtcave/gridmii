@@ -1,5 +1,7 @@
 import unittest
 
+import time
+
 from ..entity import Job, JobTable
 from .simulacra import *
 
@@ -60,7 +62,18 @@ class JobTableTests(unittest.TestCase):
         table.new_job(mock_message(), self.TARGET)
         self.assertTrue(table.has_jobs())
 
+class JobTests(unittest.IsolatedAsyncioTestCase):
+    async def test_startup(self):
+        table = JobTable()
+        message = mock_message()
 
+        job = table.new_job(message, "test-node")
+        moment = time.monotonic()  # moment just after job creation
+        self.assertFalse(job.started)
+        self.assertLessEqual(job.start_time, moment)    # job object created before the moment
+        await job.startup()
+        self.assertTrue(job.started)
+        self.assertGreaterEqual(job.start_time, moment) # job started after the moment
 
 
 if __name__ == '__main__':
