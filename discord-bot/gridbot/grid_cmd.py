@@ -25,9 +25,9 @@ class GridMiiCogBase(commands.Cog):
     async def cog_check(self, ctx: Context) -> bool:
         """Check for appropriate channel and user"""
         # If a channel was specified in the config, only allow commands in that channel.
-        channel_ok =  ctx.channel.id == CHANNEL or CHANNEL is None
+        channel_ok =  ctx.channel.id == Config.CHANNEL or Config.CHANNEL is None
         # Don't let banned users use the cog
-        return channel_ok and ctx.author.id not in BANNED_USERS
+        return channel_ok and ctx.author.id not in Config.BANNED_USERS
 
 
     @property
@@ -134,7 +134,7 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
             return False
         # approve if any of the user roles are in the admin role set
         user_roles = [r.id for r in ctx.author.roles]
-        for admin_role in ADMIN_ROLES:
+        for admin_role in Config.ADMIN_ROLES:
             if admin_role in user_roles:
                 return True
         # otherwise deny

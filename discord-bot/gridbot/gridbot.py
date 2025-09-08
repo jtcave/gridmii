@@ -95,10 +95,10 @@ class GridMiiBot(FlexBot):
         # Wait for Discord for good measure
         await self.wait_until_ready()
         # Attempt to resolve the target channel name.
-        if CHANNEL:
-            self.target_channel = self.get_channel(CHANNEL)
+        if Config.CHANNEL:
+            self.target_channel = self.get_channel(Config.CHANNEL)
             if not self.target_channel:
-                logging.error(f"The target channel specified wasn't found. ID = {CHANNEL}")
+                logging.error(f"The target channel specified wasn't found. ID = {Config.CHANNEL}")
             else:
                 # Do setup things that need the target channel
                 logging.debug(f"Using #{self.target_channel} as the target channel")
@@ -114,7 +114,7 @@ class GridMiiBot(FlexBot):
     async def do_mqtt_task(self):
         """Coroutine that sets up the MQTT client and processes inbound messages.
         This is meant to be scheduled in the bot's event loop."""
-        if MQTT_TLS:
+        if Config.MQTT_TLS:
             tls_params = aiomqtt.TLSParameters()
         else:
             tls_params = None
@@ -122,8 +122,8 @@ class GridMiiBot(FlexBot):
         await self.wait_until_ready()
         logging.info("Starting MQTT task") # helpmii
 
-        self.mq_client = aiomqtt.Client(BROKER, PORT,
-                                        username=MQTT_USERNAME, password=MQTT_PASSWORD,
+        self.mq_client = aiomqtt.Client(Config.BROKER, Config.PORT,
+                                        username=Config.MQTT_USERNAME, password=Config.MQTT_PASSWORD,
                                         tls_params=tls_params)
         while True:
             try:
@@ -304,9 +304,9 @@ class GridMiiBot(FlexBot):
     async def flex_check(self, ctx: Context) -> bool:
         """Check for appropriate channel and user"""
         # If a channel was specified in the config, only allow commands in that channel.
-        channel_ok =  ctx.channel.id == CHANNEL or CHANNEL is None
+        channel_ok =  ctx.channel.id == Config.CHANNEL or Config.CHANNEL is None
         # Don't let banned users use the cog
-        return channel_ok and ctx.author.id not in BANNED_USERS
+        return channel_ok and ctx.author.id not in Config.BANNED_USERS
 
     async def flex_command(self, ctx: Context, /):
         # chop off the command prefix
