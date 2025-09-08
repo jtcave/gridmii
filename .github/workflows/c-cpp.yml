@@ -18,4 +18,6 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libmosquitto-dev libjansson-dev
     - name: make
-      run: make
+      run: |
+        cd node-server
+        make
