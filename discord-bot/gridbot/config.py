@@ -2,20 +2,25 @@
 import tomllib
 import discord
 
-with open("data/config.toml", 'rb') as config_file:
-    config = tomllib.load(config_file)
+
 
 class Config:
-    TOKEN = config['token']
-    GUILD = discord.Object(id=config['guild'])
-    CHANNEL = config.get("channel", None)
-    ADMIN_ROLES = config.get("admin_roles", [])
-    BANNED_USERS = config.get("banned_users", [])
-    BROKER = config["mqtt_broker"]
-    PORT = config["mqtt_port"]
-    MQTT_TLS = config.get("mqtt_tls", False)
-    MQTT_USERNAME = config.get("mqtt_username", "")
-    MQTT_PASSWORD = config.get("mqtt_password", "")
-    TARGET_NODE = config.get("target_node", None)
-    NOTIFY_LIMIT = config.get("notify_limit", 60)
-    MIN_REPORT_SEC = config.get("min_report_sec", 1)
+
+
+    @classmethod
+    def load_config(cls, config_path: str):
+        with open(config_path, 'rb') as config_file:
+            config = tomllib.load(config_file)
+            cls.TOKEN = config['token']
+            cls.GUILD = discord.Object(id=config['guild'])
+            cls.CHANNEL = config.get("channel", None)
+            cls.ADMIN_ROLES = config.get("admin_roles", [])
+            cls.BANNED_USERS = config.get("banned_users", [])
+            cls.BROKER = config["mqtt_broker"]
+            cls.PORT = config["mqtt_port"]
+            cls.MQTT_TLS = config.get("mqtt_tls", False)
+            cls.MQTT_USERNAME = config.get("mqtt_username", "")
+            cls.MQTT_PASSWORD = config.get("mqtt_password", "")
+            cls.TARGET_NODE = config.get("target_node", None)
+            cls.NOTIFY_LIMIT = config.get("notify_limit", 60)
+            cls.MIN_REPORT_SEC = config.get("min_report_sec", 1)

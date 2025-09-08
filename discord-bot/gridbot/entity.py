@@ -323,7 +323,7 @@ class EjectedNode(Node):
 
 class NodeTable:
 
-    _locus: str | None = Config.TARGET_NODE
+    _locus: str | None = None
 
     def __init__(self):
         self._table: dict[str, Node] = {}

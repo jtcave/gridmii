@@ -1,13 +1,21 @@
 import unittest
 import unittest.mock as mock
 
+from ..config import Config
 from ..grid_cmd import UserCommandCog, GridMiiCogBase
 from ..entity import NodeTable, JobTable
 from .simulacra import *
 
+
+
 class UserCommandTest(unittest.IsolatedAsyncioTestCase):
-    def cog(self):
+
+    @staticmethod
+    def cog():
         return UserCommandCog(mock_bot())
+
+    def setUp(self):
+        Config.load_config("data/config.toml")
 
     def test_smoke_test(self):
         cog = self.cog()
