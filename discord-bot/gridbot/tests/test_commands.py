@@ -14,9 +14,6 @@ class UserCommandTest(unittest.IsolatedAsyncioTestCase):
     def cog():
         return UserCommandCog(mock_bot())
 
-    def setUp(self):
-        Config.load_config("data/config.toml")
-
     def test_smoke_test(self):
         cog = self.cog()
         self.assertIsInstance(cog, GridMiiCogBase)
