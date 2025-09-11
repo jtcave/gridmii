@@ -1,5 +1,6 @@
 // gm-node.h - global declarations for gridmii node server
 
+#include <stdint.h>
 #include <sys/types.h>
 #include <mosquitto.h>
 #include <jansson.h>
