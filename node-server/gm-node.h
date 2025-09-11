@@ -3,6 +3,7 @@
 #include <sys/types.h>
 #include <mosquitto.h>
 #include <jansson.h>
+#include <poll.h>
 
 #ifndef _GM_NODE_H
 #define _GM_NODE_H
@@ -32,6 +33,9 @@ struct gm_config_data {
 // global configuration table
 extern struct gm_config_data gm_config;
 
+// global pollfds (for mqtt and jobs)
+extern struct pollfd pollfds[1 + (MAX_JOBS * 2)];
+
 // flag that suppresses our atexit function in the child process
 extern bool gm_in_child;
 
@@ -46,6 +50,9 @@ struct mosquitto *gm_init_mqtt(void);
 
 // Connect to the broker and subscribe to topics
 void gm_connect_mqtt(void);
+
+// Process MQTT events. This is to be called by the main event loop after polling the socket.
+void gm_process_mqtt(short revents);
 
 // Serialize a JSON object and publish it as the payload of a given topic
 // Takes ownership of the object and decrefs it.
@@ -84,17 +91,26 @@ struct job {
     int job_stdout;                 // fd for job stdout
     int job_stderr;                 // fd for job stdout
     bool running;                   // is this job currently running?
+    bool done;                      // is this job done?
     int exit_stat;                  // exit status as returned by waitpid
     write_callback on_write;        // called when the process writes to stdout/stderr
     size_t stdout_sent;             // bytes already sent from stdout to MQTT
     char temp_path[MAX_TEMP_NAME_SIZE]; // path to the job script
+    int pollfd_idx;                 // index into pollfds[] of stdout
 };
+
+// job table
+extern struct job job_table[MAX_JOBS];
 
 // initialize the job table
 void init_job_table(void);
 
 // Submit a job by providing a shell command
 int submit_job(jid_t jid, write_callback on_write, const char *command);
+
+// True iff the jobspec refers to an active job
+// If this returns false, the jobspec is meaningless
+bool job_active(struct job *jobspec);
 
 // write to job stdin
 int job_stdin_write(jid_t jid, const char *data, size_t len);
@@ -111,8 +127,8 @@ int job_signal(jid_t jid, int signum);
 // returns whether jobs are running
 bool jobs_running(void);
 
-// Process events for jobs
-void do_job_events(void);
+// Process events for a given job
+void do_job_events(struct job *jobspec);
 
 // Terminate all jobs
 void job_scram(void);
