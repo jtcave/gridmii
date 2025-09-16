@@ -27,7 +27,7 @@
 #define JOB_SCRIPT_LIMIT 4000
 
 // maximum amount a job can write to stdout+stderr
-#define STDOUT_LIMIT 262114 // 256k
+// #define STDOUT_LIMIT 262114 // 256k
 
 // process number ulimit (see setrlimit(2) RLIMIT_NPROC)
 // #define PROC_LIMIT 128
