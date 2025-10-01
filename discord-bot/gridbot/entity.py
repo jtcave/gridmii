@@ -1,3 +1,4 @@
+import json
 import os
 import io
 import typing
@@ -276,8 +277,9 @@ class Node:
         """Submit a job to the node"""
         job = job_table.new_job(output_message, self.node_name, output_filter, ctx)
         topic = f"{self.node_name}/submit/{job.jid}"
+        payload = json.dumps({"script": command_string})
         logging.debug(f"publishing job {job.jid} to node...")
-        await mq_client.publish(topic, payload=command_string, qos=2)
+        await mq_client.publish(topic, payload=payload, qos=2)
         logging.debug(f"job {job.jid} published")
         return job
 
