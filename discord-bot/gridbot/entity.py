@@ -121,7 +121,7 @@ class Job:
         # won't actually ping the user.
         curTime = time.monotonic()
         if (curTime - self.start_time) > Config.NOTIFY_LIMIT and not self.notified:
-            await self.ctx.send(f"<@{self.ctx.message.author.id}> your job ({self.ctx.message.jump_url}) has finished")
+            await self.ctx.send(f"<@{self.ctx.message.author.id}> your job ({self.output_message.jump_url}) has finished")
             # Since this function can recurse, avoid notifying the user twice
             self.notified = True
 
