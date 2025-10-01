@@ -92,19 +92,68 @@ void init_topic_templates() {
     topic_patterns_initialized = true;
 }
 
+/*
+{
+    script: "JOB_SCRIPT_GOES_HERE",
+    tty: undefined | {
+        columns: $COLUMNS,
+        lines: $LINES,
+        term: $TERM
+    }
+}
+*/
+void on_submit_job(const struct mosquitto_message *message, jid_t jid) {
+    // attempt to decode
+    char script[JOB_SCRIPT_LIMIT+1] = {0};
+    json_error_t j_err;
+    json_t *payload = json_loadb(message->payload, message->payloadlen, 0, &j_err);
+    if (payload != NULL) {
+        // fish out the script
+        json_t *payload_script = json_object_get(payload, "script");
+        const char *payload_script_text;
+        if (payload_script != NULL &&
+            (payload_script_text = json_string_value(payload_script)) != NULL) {
+                strlcpy(script, payload_script_text, JOB_SCRIPT_LIMIT);
+                json_decref(payload);
+        }
+        else {
+            // reject
+            fprintf(stderr, "malformed JSON (no script attribute or not an object)");
+            gm_publish_job_status(jid, "reject", "malformed JSON (no script attribute or not an object)");
+            json_decref(payload);
+        }
+    }
+    else {
+        // decoding failure means it's probably a legacy job script
+        memset(script, 0, JOB_SCRIPT_LIMIT+1);
+        int payload_size = (message->payloadlen >= JOB_SCRIPT_LIMIT)
+                                ? JOB_SCRIPT_LIMIT - 1
+                                : message->payloadlen;
+        memcpy(script, message->payload, payload_size);
+    }
+
+
+    if (jid == 0) {
+        // sender doesn't care what the JID is, so make one up
+        static jid_t jid_counter = 777;
+        jid = jid_counter++;
+    }
+    int rv = submit_job(jid, on_stdout_mqtt, script);
+    if (rv == 0) {
+        gm_publish_job_status(jid, "startup", "");
+    }
+    else {
+        fprintf(stderr, "couldn't start job: %s\n", strerror(rv));
+        gm_publish_job_status(jid, "reject", strerror(rv));
+    }
+}
+
 void gm_route_message(const struct mosquitto_message *message) {
+    // log the mid and topic
+    printf("message %d @ %s\n", message->mid, message->topic);
+
     // set up patterns
     init_topic_templates();
-
-    // slurp payload out of message
-    char payload[JOB_SCRIPT_LIMIT+1] = {0};
-    memset(payload, 0, JOB_SCRIPT_LIMIT+1);
-    int payload_size = (message->payloadlen >= JOB_SCRIPT_LIMIT)
-                            ? JOB_SCRIPT_LIMIT - 1
-                            : message->payloadlen;
-    memcpy(payload, message->payload, payload_size);
-    
-    printf("message %d @ %s: %s\n", message->mid, message->topic, payload);
 
     // start matching topic patterns
     jid_t jid = 0;
@@ -113,19 +162,7 @@ void gm_route_message(const struct mosquitto_message *message) {
     // submit job endpoint
 
     if (sscanf(message->topic, topic_patterns[TOPIC_SUBMIT_JOB], &jid) > 0) {
-        if (jid == 0) {
-            // sender doesn't care what the JID is, so make one up
-            static jid_t jid_counter = 777;
-            jid = jid_counter++;
-        }
-        int rv = submit_job(jid, on_stdout_mqtt, payload);
-        if (rv == 0) {
-            gm_publish_job_status(jid, "startup", "");
-        }
-        else {
-            fprintf(stderr, "couldn't start job: %s\n", strerror(rv));
-            gm_publish_job_status(jid, "reject", strerror(rv));
-        }
+        on_submit_job(message, jid);
     }
 
     // stdin endpoint
