@@ -33,63 +33,29 @@ def disposition(status:int) -> str:
         # We don't expect WIFSTOPPED or WIFCONTINUED, so they can fall through here
         return f"Command exited with waitpid status {status}"
 
-class Job:
-    """Represents a running job somewhere in the grid. A Job object a numeric
-    JID (job ID) with an output buffer and a Discord message that displays the
-    contents of that buffer. Standard output/error writes from the job will
-    update the output buffer."""
-
-    # this magic number is the mas number of characters a Discord message can have (without a Nitro sub)
-    MESSAGE_LIMIT = 2000
-
-    def __init__(self, jid: int, output_message: discord.Message, target_node_name: str,
-                 output_filter=None, ctx: Context|None=None, callback=None):
-        self.jid = jid
+class OutputHandler:
+    """Handles output for pipe-based jobs. These are expected to be a stream
+    of pure text data. Control characters and escape sequences are unprocessed."""
+    def __init__(self, output_message: discord.Message, output_filter=None, ctx: Context|None=None):
         self.output_buffer = io.BytesIO()
         self.output_message = output_message
-        self.notified = False
-        self.will_attach = False
-        self.started = False
-        self.start_time = time.monotonic()
-        self.target_node = target_node_name
         self.filter = output_filter if output_filter else (lambda x: x)
         self.ctx = ctx
-        self.callback = callback    # async def callback(job: Job, exit_status: int|None): ...
+        self.will_attach = False
 
     def buffer_contents(self) -> str:
         """Return the contents of the output buffer."""
         contents = self.output_buffer.getvalue().decode(errors="replace")
         return self.filter(contents)
 
-    async def startup(self):
-        """Called when the job has successfully started."""
-        await self.output_message.edit(content=f"Your job has started on `{self.target_node}`! Stand by for output...")
-        self.started = True
-        self.start_time = time.monotonic()
-
-    async def reject(self, error: bytes):
-        """Called when the job could not start."""
-        content = f"**Could not start job:** `{error.decode(errors="replace")}`"
+    async def replace_message(self, content: str):
+        """Overwrite the output message. This does not clear the output buffer"""
         await self.output_message.edit(content=content)
-        self.started = True     # don't let the clean_if_unstarted task fire
-        del job_table._table[self.jid]
-
-    async def clean_if_unstarted(self, delay=20.0):
-        """A task that will terminate jobs that did not start in a reasonable amount of time.
-        This is meant to be scheduled as a task in the event loop."""
-        # The default delay is an extremely conservative number. One of my test nodes has a horrific connection
-        # to the broker (high latency Internet + buggy network driver), and even this isn't high enough sometimes.
-        await asyncio.sleep(delay)
-        if not self.started:
-            logging.warning(f"job {self.jid} did not start on node {self.target_node}")
-            await self.output_message.edit(content=":x: Your job did not start. The node might not be online.")
-            del job_table._table[self.jid]
-
 
     async def write(self, data: bytes):
-        """Called when stdout/stderr has been written to and the output buffer needs updated"""
-        if not self.started:
-            logging.warning(f"jid {self.jid} got write message before starting")
+        """Write data to the output buffer. Display this data in the output message,
+        if there is room."""
+        # noinspection PyTypeChecker
         self.output_buffer.write(data)
         if not self.will_attach:
             # format the output message
@@ -99,6 +65,95 @@ class Job:
                 self.will_attach = True
                 content = "Running...\n*Output will be attached to this message when the job completes*"
             await self.output_message.edit(content=content)
+
+    async def stopped(self, status: str, jid: int):
+        """Close the output buffer. If the output buffer doesn't fit in the message, attach its contents."""
+        if self.will_attach:
+            # Upload the output buffer as an attachment
+            self.output_buffer.seek(0)
+            attachment = discord.File(self.output_buffer, f"gridmii-output-{jid}.txt")
+            content = status
+            try:
+                await self.output_message.add_files(attachment)
+            except discord.HTTPException as http_exc:
+                content += f"\n**Error attaching file:**\n```{str(http_exc)}```"
+        else:
+            # Stuff the output buffer into the reply message
+            output = self.buffer_contents()
+            if output and not output.isspace():
+                content = f"\n```ansi\n{output}\n```\n{status}"
+            else:
+                content = status + "\n*The command had no output*"
+            if len(content) > Job.MESSAGE_LIMIT:
+                # Edge case: the termination message would put the message over the limit
+                # In this case, set will_attach and backpedal.
+                self.will_attach = True
+                await self.stopped(status, jid)
+                return
+        await self.output_message.edit(content=content)
+        self.output_buffer.close()
+
+    async def notify_stopped(self):
+        content = f"<@{self.ctx.message.author.id}> your job ({self.output_message.jump_url}) has finished"
+        await self.ctx.send(content=content)
+
+
+class Job:
+    """Represents a running job somewhere in the grid. A Job object a numeric
+    JID (job ID) with an output buffer and a Discord message that displays the
+    contents of that buffer. Standard output/error writes from the job will
+    update the output buffer."""
+
+    # this magic number is the mas number of characters a Discord message can have (without a Nitro sub)
+    MESSAGE_LIMIT = 2000
+
+    def __init__(self, jid: int, target_node_name: str, output_handler: OutputHandler, callback=None):
+        self.jid = jid
+        self.output_handler = output_handler
+        #self.output_buffer = io.BytesIO()
+        #self.output_message = output_message
+        # self.notified = False
+        # self.will_attach = False
+        self.started = False
+        self.start_time = time.monotonic()
+        self.target_node = target_node_name
+        #self.filter = output_filter if output_filter else (lambda x: x)
+        #self.ctx = ctx
+        self.callback = callback    # async def callback(job: Job, exit_status: int|None): ...
+
+    async def startup(self):
+        """Called when the job has successfully started."""
+        content = f"Your job has started on `{self.target_node}`! Stand by for output..."
+        await self.output_handler.replace_message(content=content)
+        self.started = True
+        self.start_time = time.monotonic()
+
+    async def reject(self, error: bytes):
+        """Called when the job could not start."""
+        content = f"**Could not start job:** `{error.decode(errors="replace")}`"
+        await self.output_handler.replace_message(content=content)
+        self.started = True     # don't let the clean_if_unstarted task fire
+        job_table.delete_job(self.jid)
+
+    async def clean_if_unstarted(self, delay=20.0):
+        """A task that will terminate jobs that did not start in a reasonable amount of time.
+        This is meant to be scheduled as a task in the event loop."""
+        # The default delay is an extremely conservative number. One of my test nodes has a horrific connection
+        # to the broker (high latency Internet + buggy network driver), and even this isn't high enough sometimes.
+        await asyncio.sleep(delay)
+        if not self.started:
+            logging.warning(f"job {self.jid} did not start on node {self.target_node}")
+            content = ":x: Your job did not start. The node might not be online."
+            await self.output_handler.replace_message(content=content)
+            job_table.delete_job(self.jid)
+
+
+    async def write(self, data: bytes):
+        """Called when stdout/stderr has been written to and the output buffer needs updated"""
+        if not self.started:
+            logging.warning(f"jid {self.jid} got write message before starting")
+        await self.output_handler.write(data)
+
 
     async def stdin(self, data: bytes, mq_client: aiomqtt.Client):
         """Send data to the job's standard input"""
@@ -118,64 +173,37 @@ class Job:
 
     async def stopped(self, result: bytes=b'0', *, abandoned=False):
         """Called when the job terminates, successfully or not"""
-        # Has the command been running for longer than the
-        # notify limit?  If so, mention the user.
-        # We must do this in a new message because message edits
-        # won't actually ping the user.
-        curTime = time.monotonic()
-        if (curTime - self.start_time) > Config.NOTIFY_LIMIT and not self.notified:
-            await self.ctx.send(f"<@{self.ctx.message.author.id}> your job ({self.output_message.jump_url}) has finished")
-            # Since this function can recurse, avoid notifying the user twice
-            self.notified = True
-
-        # Decode the result code
+        # Decode the result code to form the status
         if not abandoned:
+            # noinspection PyTypeChecker
             result_code = int(result)
             status = disposition(result_code)
         else:
             result_code = None
             status = "The job was abandoned"
 
-        # difference between current time vs start time, human-readable
+        # get elapsed time
         cur_time = time.monotonic()
         sec = cur_time - self.start_time
 
-        # enforce minimum threshold
+        # add elapsed time to the status if needed
         if sec > Config.MIN_REPORT_SEC:
             elapsed = hr.precise_delta(dt.timedelta(seconds=sec))
             status += f" after {elapsed}"
 
-        if self.will_attach:
-            # Upload the output buffer as an attachment
-            self.output_buffer.seek(0)
-            attachment = discord.File(self.output_buffer, f"gridmii-output-{self.jid}.txt")
-            content = status
-            try:
-                await self.output_message.add_files(attachment)
-            except discord.HTTPException as http_exc:
-                content += f"\n**Error attaching file:**\n```{str(http_exc)}```"
-        else:
-            # Stuff the output buffer into the reply message
-            output = self.buffer_contents()
-            if output and not output.isspace():
-                content = f"\n```ansi\n{output}\n```\n{status}"
-            else:
-                content = status + "\n*The command had no output*"
-            if len(content) > Job.MESSAGE_LIMIT:
-                # Edge case: the termination message would put the message over the limit
-                # In this case, set will_attach and backpedal.
-                self.will_attach = True
-                await self.stopped(result)
-                return
-        await self.output_message.edit(content=content)
-        self.output_buffer.close()
-        del job_table._table[self.jid]
+        # ping user if needed
+        if sec > Config.NOTIFY_LIMIT:
+            await self.output_handler.notify_stopped()
+
+        await self.output_handler.stopped(status, self.jid)
+        job_table.delete_job(self.jid)
+
         if self.callback is not None:
             await self.callback(self, result_code)
 
     def tail(self, lines: int) -> list[str]:
         """Return the last few lines of job output"""
-        buffer_lines = self.buffer_contents().split('\n')
+        buffer_lines = self.output_handler.buffer_contents().split('\n')
         return buffer_lines[-lines:]
 
     async def abandon(self, mq_client: aiomqtt.Client):
@@ -199,7 +227,8 @@ class JobTable:
             """Create fresh job object tied to an output message"""
             self._last_jid += 1
             jid = self._last_jid
-            new_job_entry = Job(jid, output_message, target_node_name, output_filter, ctx, callback)
+            output_handler = OutputHandler(output_message, output_filter, ctx)
+            new_job_entry = Job(jid, target_node_name, output_handler, callback)
             self._table[jid] = new_job_entry
             return new_job_entry
 
@@ -210,6 +239,9 @@ class JobTable:
         def by_jid(self, jid: int) -> Job:
             """Returns the job with the given jid, or throws KeyError if there is no such job"""
             return self._table[jid]
+
+        def delete_job(self, jid: int):
+            del self._table[jid]
 
         def __iter__(self):
             """Returns an iterator over the jobs in the job table"""
@@ -266,8 +298,7 @@ class Node:
     @property
     def is_present(self):
         """True iff the node is present in the node table"""
-        # TODO: move this to node table
-        return self.node_name in node_table._table
+        return node_table.node_present(self.node_name)
 
     def can_accept_jobs(self):
         # stub for now
@@ -423,6 +454,7 @@ class UserPrefs:
 
     def __init__(self):
         self._locus: str|None = None
+        self._tty: tuple[int,int,str]|None = None
 
     @classmethod
     def get_prefs(cls, user: discord.User) -> Self:
