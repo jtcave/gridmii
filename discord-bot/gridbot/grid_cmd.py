@@ -223,7 +223,7 @@ class JobControlCog(GridMiiCogBase, name="Job Control"):
         replied_msg_id = msg.reference.message_id
         # scan for messages
         for job in job_table:
-            if job.output_message.id == replied_msg_id:
+            if job.output_handler.output_message.id == replied_msg_id:
                 return job
         # no message
         return None

@@ -14,6 +14,7 @@ import datetime as dt
 
 from .config import *
 from .output_filter import filter_backticks
+from .tty_model import TtyModel
 
 ## job table ##
 
@@ -124,6 +125,29 @@ class PipeOutputHandler(OutputHandler):
         else:
             await super().update_message_stopped(status, jid)
 
+class PtyOutputHandler(OutputHandler):
+    """Performs a level of tty emulation on job output"""
+    # TODO: detect whether it scrolled
+    # TODO: user configurable dimensions
+    def __init__(self, output_message: discord.Message, output_filter=None, ctx: Context|None=None):
+        super().__init__(output_message, output_filter, ctx)
+        self.will_attach = False
+        self.tty = TtyModel()
+
+    @override
+    async def write(self, data: bytes):
+        self.tty.write(data)
+        await super().write(data)
+
+    @override
+    async def update_message(self, data: bytes):
+        content = f"Running...\n```ansi\n{self.tty.render()}\n```"
+        await self.output_message.edit(content=content)
+
+    @override
+    async def update_message_stopped(self, status: str, jid: int):
+        content = f"```ansi\n{self.tty.render()}\n```\n{status}"
+        await self.output_message.edit(content=content)
 
 class Job:
     """Represents a running job somewhere in the grid. A Job object a numeric
@@ -243,7 +267,8 @@ class JobTable:
             """Create fresh job object tied to an output message"""
             self._last_jid += 1
             jid = self._last_jid
-            output_handler = PipeOutputHandler(output_message, output_filter, ctx)
+            # TODO: dispatch
+            output_handler = PtyOutputHandler(output_message, output_filter, ctx)
             new_job_entry = Job(jid, target_node_name, output_handler)
             self._table[jid] = new_job_entry
             return new_job_entry
@@ -271,6 +296,7 @@ class JobTable:
 job_table = JobTable()
 
 # noinspection PyMissingConstructor
+# TODO: realign with new Job ctor
 class RefusedJob(Job):
     """A stub that represents a job that the controller has refused to submit."""
 
