@@ -2,7 +2,7 @@ import json
 import os
 import io
 import typing
-from typing import Self
+from typing import Self, override
 import asyncio
 import logging
 import aiomqtt
@@ -34,14 +34,13 @@ def disposition(status:int) -> str:
         return f"Command exited with waitpid status {status}"
 
 class OutputHandler:
-    """Handles output for pipe-based jobs. These are expected to be a stream
-    of pure text data. Control characters and escape sequences are unprocessed."""
+    """Basic output handler """
     def __init__(self, output_message: discord.Message, output_filter=None, ctx: Context|None=None):
         self.output_buffer = io.BytesIO()
         self.output_message = output_message
         self.filter = output_filter if output_filter else (lambda x: x)
         self.ctx = ctx
-        self.will_attach = False
+        self.will_attach = True
 
     def buffer_contents(self) -> str:
         """Return the contents of the output buffer."""
@@ -52,11 +51,51 @@ class OutputHandler:
         """Overwrite the output message. This does not clear the output buffer"""
         await self.output_message.edit(content=content)
 
+    async def update_message(self, data: bytes):
+        """Edit the message to account for new data written to the output buffer.
+        This is meant to be overridden by a subclass"""
+        pass
+
     async def write(self, data: bytes):
         """Write data to the output buffer. Display this data in the output message,
         if there is room."""
         # noinspection PyTypeChecker
         self.output_buffer.write(data)
+        await self.update_message(data)
+
+    async def notify_stopped(self):
+        """Ping the user who started the job"""
+        content = f"<@{self.ctx.message.author.id}> your job ({self.output_message.jump_url}) has finished"
+        await self.ctx.send(content=content)
+
+    async def update_message_stopped(self, status: str, jid: int):
+        """Edit the message to its final form once the job is complete.
+        This is meant to be overridden by a subclass.
+        The `will_attach` attribute can be set in this method; doing so will cause the output buffer to be attached"""
+        await self.output_message.edit(content=status)
+
+    async def stopped(self, status: str, jid: int):
+        """Close the output buffer. If the output buffer doesn't fit in the message, attach its contents."""
+        if self.will_attach:
+            # Upload the output buffer as an attachment
+            self.output_buffer.seek(0)
+            attachment = discord.File(self.output_buffer, f"gridmii-output-{jid}.txt")
+            try:
+                await self.output_message.add_files(attachment)
+            except discord.HTTPException as http_exc:
+                status += f"\n**Error attaching file:**\n```{str(http_exc)}```"
+        await self.update_message_stopped(status, jid)
+        self.output_buffer.close()
+
+
+class PipeOutputHandler(OutputHandler):
+    """This subclass will display a small amount of data (around 1900 characters) from a job"""
+    def __init__(self, output_message: discord.Message, output_filter=None, ctx: Context|None=None):
+        super().__init__(output_message, output_filter, ctx)
+        self.will_attach = False
+
+    @override
+    async def update_message(self, data: bytes):
         if not self.will_attach:
             # format the output message
             content = f"Running...\n```ansi\n{self.buffer_contents()}\n```"
@@ -66,18 +105,9 @@ class OutputHandler:
                 content = "Running...\n*Output will be attached to this message when the job completes*"
             await self.output_message.edit(content=content)
 
-    async def stopped(self, status: str, jid: int):
-        """Close the output buffer. If the output buffer doesn't fit in the message, attach its contents."""
-        if self.will_attach:
-            # Upload the output buffer as an attachment
-            self.output_buffer.seek(0)
-            attachment = discord.File(self.output_buffer, f"gridmii-output-{jid}.txt")
-            content = status
-            try:
-                await self.output_message.add_files(attachment)
-            except discord.HTTPException as http_exc:
-                content += f"\n**Error attaching file:**\n```{str(http_exc)}```"
-        else:
+    @override
+    async def update_message_stopped(self, status: str, jid: int):
+        if not self.will_attach:
             # Stuff the output buffer into the reply message
             output = self.buffer_contents()
             if output and not output.isspace():
@@ -86,16 +116,13 @@ class OutputHandler:
                 content = status + "\n*The command had no output*"
             if len(content) > Job.MESSAGE_LIMIT:
                 # Edge case: the termination message would put the message over the limit
-                # In this case, set will_attach and backpedal.
+                # In this case, set will_attach and backpedal
                 self.will_attach = True
-                await self.stopped(status, jid)
-                return
-        await self.output_message.edit(content=content)
-        self.output_buffer.close()
-
-    async def notify_stopped(self):
-        content = f"<@{self.ctx.message.author.id}> your job ({self.output_message.jump_url}) has finished"
-        await self.ctx.send(content=content)
+                await super().update_message_stopped(status, jid)
+            else:
+                await self.output_message.edit(content=content)
+        else:
+            await super().update_message_stopped(status, jid)
 
 
 class Job:
@@ -108,18 +135,11 @@ class Job:
     MESSAGE_LIMIT = 2000
 
     def __init__(self, jid: int, target_node_name: str, output_handler: OutputHandler):
-        # TODO: take the output handler as an argument
         self.jid = jid
         self.output_handler = output_handler
-        #self.output_buffer = io.BytesIO()
-        #self.output_message = output_message
-        # self.notified = False
-        # self.will_attach = False
         self.started = False
         self.start_time = time.monotonic()
         self.target_node = target_node_name
-        #self.filter = output_filter if output_filter else (lambda x: x)
-        #self.ctx = ctx
 
     async def startup(self):
         """Called when the job has successfully started."""
@@ -223,7 +243,7 @@ class JobTable:
             """Create fresh job object tied to an output message"""
             self._last_jid += 1
             jid = self._last_jid
-            output_handler = OutputHandler(output_message, output_filter, ctx)
+            output_handler = PipeOutputHandler(output_message, output_filter, ctx)
             new_job_entry = Job(jid, target_node_name, output_handler)
             self._table[jid] = new_job_entry
             return new_job_entry
@@ -295,7 +315,6 @@ class Node:
     @property
     def is_present(self):
         """True iff the node is present in the node table"""
-        # TODO: move this to node table
         return node_table.node_present(self.node_name)
 
     def can_accept_jobs(self):
