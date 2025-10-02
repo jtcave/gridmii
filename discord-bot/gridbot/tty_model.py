@@ -7,12 +7,13 @@ def make_plane(rows, columns, fill=' '):
     return [make_row(columns, fill) for r in range(rows)]
 
 class TtyModel:
-    def __init__(self, columns=40, lines=20):
+    def __init__(self, columns=40, lines=20, implicit_cr=False):
         self.columns = columns
         self.lines = lines
         self.char_plane = make_plane(lines, columns)
         self.cursor_line = 0
         self.cursor_column = 0
+        self.implicit_cr = implicit_cr
 
     def render(self) -> str:
         """Convert the character plane to a single string"""
@@ -33,6 +34,8 @@ class TtyModel:
         self.cursor_line += 1
         if self.cursor_line >= self.lines:
             self.scroll()
+        if self.implicit_cr:
+            self.carriage_return()
 
     def scroll(self):
         new_row = make_row(self.columns)
