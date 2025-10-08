@@ -68,6 +68,8 @@ void gm_shutdown(void);
 void gm_reload(void);
 
 /// declarations - job table ///
+
+// numeric job ID
 typedef uint32_t jid_t;
 
 // forward declare `struct job` because we need it as a paraneter for callbacks, which are
@@ -77,17 +79,25 @@ struct job;
 // callback type for job write
 typedef void (*write_callback)(struct job *jobspec, int source_fd, char *buffer, size_t readsize);
 
+// indicates what kind of transport a job's stdio is using
+enum job_transport {
+    TRANSPORT_NULL,
+    TRANSPORT_PIPE
+};
+typedef enum job_transport job_transport_t;
+
 // job table entry
 struct job {
-    jid_t job_id;                   // global job ID issued by grid controller
-    pid_t job_pid;                  // process (group) id of the job subprocess
-    int job_stdin;                  // fd for job stdin
-    int job_stdout;                 // fd for job stdout
-    int job_stderr;                 // fd for job stdout
-    bool running;                   // is this job currently running?
-    int exit_stat;                  // exit status as returned by waitpid
-    write_callback on_write;        // called when the process writes to stdout/stderr
-    size_t stdout_sent;             // bytes already sent from stdout to MQTT
+    jid_t job_id;                       // global job ID issued by grid controller
+    pid_t job_pid;                      // process (group) id of the job subprocess
+    job_transport_t transport;          // type of transport (pipe, pty, etc.)
+    int job_stdin;                      // fd for job stdin
+    int job_stdout;                     // fd for job stdout
+    int job_stderr;                     // fd for job stdout
+    bool running;                       // is this job currently running?
+    int exit_stat;                      // exit status as returned by waitpid
+    write_callback on_write;            // called when the process writes to stdout/stderr
+    size_t stdout_sent;                 // bytes already sent from stdout to MQTT
     char temp_path[MAX_TEMP_NAME_SIZE]; // path to the job script
 };
 
@@ -95,7 +105,8 @@ struct job {
 void init_job_table(void);
 
 // Submit a job by providing a shell command
-int submit_job(jid_t jid, write_callback on_write, const char *command);
+int submit_job(jid_t jid, write_callback on_write,
+                job_transport_t transport, const char *command);
 
 // write to job stdin
 int job_stdin_write(jid_t jid, const char *data, size_t len);

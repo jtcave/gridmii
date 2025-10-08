@@ -78,7 +78,8 @@ void init_job_table() {
 }
 
 // Start a job, including the process it monitors
-int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write, char *const *argv) {
+int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
+                job_transport_t transport, char *const *argv) {
     int rv;
 
     // reject null callback
@@ -471,7 +472,7 @@ void job_roll_call() {
 }
 
 // Submit a job by providing a shell command
-int submit_job(jid_t jid, write_callback on_write, const char *command) {
+int submit_job(jid_t jid, write_callback on_write, job_transport_t transport, const char *command) {
     // First, put the command in a temporary file to be used as a shell script.
     char *path = malloc(gm_config.tmp_name_size);
     snprintf(path, gm_config.tmp_name_size, "%s/%s", gm_config.tmpdir, TEMP_PATTERN);
@@ -498,7 +499,7 @@ int submit_job(jid_t jid, write_callback on_write, const char *command) {
     memcpy(jobspec->temp_path, path, gm_config.tmp_name_size);
     
     // actually launch the job
-    int spawn_code = spawn_job(jobspec, jid, on_write, argv);
+    int spawn_code = spawn_job(jobspec, jid, on_write, transport, argv);
     fprintf(stderr, "spawn_job() for jid %d returned %d\n", jid, spawn_code);
     if (spawn_code != 0) {
         job_rm_temp(jobspec);
