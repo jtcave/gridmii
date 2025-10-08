@@ -141,14 +141,19 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
             return rv;
         }
         // TODO: set pty write to be non-blocking?
+
+        // dup pt_primary into  stdin
         jobspec->job_stdout = pt_primary;
-        if ((jobspec->job_stdin = dup(pt_primary)) == -1
-        || (jobspec->job_stderr = dup(pt_primary)) == -1) {
+        if ((jobspec->job_stdin = dup(pt_primary)) == -1) {
             close(pt_primary);
             rv = errno;
             warn("could not dup pty to stdin/stderr");
             return rv;
         }
+        // don't bother with a separate stderr fd, it'll all go through the pty
+        // anyway, and having two copies of the pty will confuse the event loop
+        jobspec->job_stderr = -1;
+
         
     }
     else {
@@ -353,7 +358,7 @@ void poll_job_output(struct job *jobspec) {
         // we might be able to do some reads, check our fds
 
         for (int i = 0; i <= 1; i++) {
-            if (polls[i].revents & (POLLIN|POLLHUP)) {
+            if (polls[i].revents & POLLIN) {
                 read_count = read(polls[i].fd, buffer, BUFFER_SIZE);
                 if (read_count == -1) {
                     // if it's EIO then maybe it's just the pty being closed
@@ -366,6 +371,11 @@ void poll_job_output(struct job *jobspec) {
                     // EOF
                     close_job_fd(jobspec, polls[i].fd);
                 }
+            }
+            else if (polls[i].revents & POLLHUP) {
+                // hangup, so just close the fd
+                jobspec->on_write(jobspec, polls[i].fd, buffer, 0);
+                close_job_fd(jobspec, polls[i].fd);
             }
         }
     }
