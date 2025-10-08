@@ -1,5 +1,7 @@
 // jobs.c - job and subprocess management
 
+#include "gm-node.h"
+
 #include <errno.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -12,7 +14,6 @@
 #include <fcntl.h>
 #include <sys/resource.h>
 
-#include "gm-node.h"
 
 struct job *job_with_jid(jid_t jid);
 void close_job_fd(struct job *jobspec, int fd);
@@ -355,10 +356,13 @@ void poll_job_output(struct job *jobspec) {
             if (polls[i].revents & (POLLIN|POLLHUP)) {
                 read_count = read(polls[i].fd, buffer, BUFFER_SIZE);
                 if (read_count == -1) {
-                    warn("error reading from job pipe");
+                    // if it's EIO then maybe it's just the pty being closed
+                    if (errno != EIO || jobspec->transport != TRANSPORT_PTY) {
+                        warn("error reading from job fd");
+                    }
                 }
                 jobspec->on_write(jobspec, polls[i].fd, buffer, read_count);
-                if (read_count == 0) {
+                if (read_count <= 0) {
                     // EOF
                     close_job_fd(jobspec, polls[i].fd);
                 }
@@ -552,7 +556,7 @@ int submit_job(jid_t jid, write_callback on_write, job_transport_t transport, co
     if (jobspec == NULL) {
         // this seems to be a semi-reasonable error return for "no job slots available"
         free(path);
-        return EUSERS;
+        return EBUSY;
     }
     // stash path to script
     memcpy(jobspec->temp_path, path, gm_config.tmp_name_size);
