@@ -234,6 +234,9 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
                 err(SPAWN_FAILURE, "could not open replica pty");
             }
 
+            // primary fd isn't needed in the subprocess
+            close(pt_primary);
+
             // wire up the replica
             if (dup2(replica, STDIN_FILENO) == -1) {
                 err(SPAWN_FAILURE, "could not dup2 stdin while bringing up job");
@@ -245,6 +248,12 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
                 err(SPAWN_FAILURE, "could not dup2 stderr while bringing up job");
             }
 
+            // export TERM
+            rv = setenv("TERM", ttyspec->term, 1);
+            if (rv == -1) {
+                warn("could not set TERM");
+            }
+
             // set window size per user request
             struct winsize wsz;
             wsz.ws_col = ttyspec->columns;
@@ -254,9 +263,6 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
             if (rv == -1) {
                 err(SPAWN_FAILURE, "ioctl TIOCSWINSZ failed while bringing up job");
             }
-
-            // primary fd isn't needed in the subprocess
-            close(pt_primary);
         }
 
         // chdir to our new working directory
