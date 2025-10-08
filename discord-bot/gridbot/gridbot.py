@@ -270,7 +270,8 @@ class GridMiiBot(FlexBot):
 
         # pick a node
         # try the user's locus
-        node = UserPrefs.get_locus(ctx.author)
+        prefs = UserPrefs.get_prefs(ctx.author)
+        node = prefs.locus
         if node is None or not node.is_present:
             # locus isn't there, so use our pick logic
             node = node_table.pick_node()
@@ -283,7 +284,7 @@ class GridMiiBot(FlexBot):
 
         # Submit the job
         try:
-            job = await node.submit_job(command_string, reply, self.mq_client, output_filter, ctx)
+            job = await node.submit_job(command_string, reply, self.mq_client, output_filter, ctx, prefs.tty)
             bot.loop.create_task(job.clean_if_unstarted())
         except aiomqtt.exceptions.MqttError as ex_mq:
             logging.exception("error publishing job submission")

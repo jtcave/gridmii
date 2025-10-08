@@ -93,6 +93,48 @@ void init_topic_templates() {
 }
 
 /*
+obj is a borrowed reference
+{
+    columns: $COLUMNS,
+    lines: $LINES,
+    term: $TERM
+}
+*/
+void unpack_ttyspec(struct ttyspec *ttyspec, json_t *obj) {
+    
+    const char *term;
+
+    if (obj == NULL || !json_is_object(obj)) {
+        ttyspec->set = false;
+        return;
+    }
+    ttyspec->set = true;
+
+    term = json_string_value(json_object_get(obj, "term"));
+    json_t *ob_columns = json_object_get(obj, "columns");
+    json_t *ob_lines = json_object_get(obj, "lines");
+
+    if (term != NULL) {
+        term = "dumb";
+    }
+    strncpy(ttyspec->term, term, TERM_NAME_LEN);
+    if (json_is_integer(ob_columns)) {
+        ttyspec->columns = json_integer_value(ob_columns);
+    }
+    else {
+        ttyspec->columns = 40;
+    }
+    
+    if (json_is_integer(ob_lines)) {
+        ttyspec->lines = json_integer_value(ob_lines);
+    }
+    else {
+        ttyspec->lines = 20;
+    }
+}
+
+
+/*
 {
     script: "JOB_SCRIPT_GOES_HERE",
     tty: undefined | {
@@ -105,6 +147,7 @@ void init_topic_templates() {
 void on_submit_job(const struct mosquitto_message *message, jid_t jid) {
     // attempt to decode
     char script[JOB_SCRIPT_LIMIT+1] = {0};
+    struct ttyspec ttyspec;
     json_error_t j_err;
     json_t *payload = json_loadb(message->payload, message->payloadlen, 0, &j_err);
     if (payload != NULL) {
@@ -114,6 +157,8 @@ void on_submit_job(const struct mosquitto_message *message, jid_t jid) {
         if (payload_script != NULL &&
             (payload_script_text = json_string_value(payload_script)) != NULL) {
                 strlcpy(script, payload_script_text, JOB_SCRIPT_LIMIT);
+                json_t *payload_tty = json_object_get(payload, "tty");
+                unpack_ttyspec(&ttyspec, payload_tty);
                 json_decref(payload);
         }
         else {
@@ -125,6 +170,7 @@ void on_submit_job(const struct mosquitto_message *message, jid_t jid) {
     }
     else {
         // decoding failure means it's probably a legacy job script
+        // (don't remove this, it's convenient for testing)
         memset(script, 0, JOB_SCRIPT_LIMIT+1);
         int payload_size = (message->payloadlen >= JOB_SCRIPT_LIMIT)
                                 ? JOB_SCRIPT_LIMIT - 1
@@ -138,7 +184,7 @@ void on_submit_job(const struct mosquitto_message *message, jid_t jid) {
         static jid_t jid_counter = 777;
         jid = jid_counter++;
     }
-    int rv = submit_job(jid, on_stdout_mqtt, TRANSPORT_PTY, script);
+    int rv = submit_job(jid, on_stdout_mqtt, &ttyspec, script);
     if (rv == 0) {
         gm_publish_job_status(jid, "startup", "");
     }
