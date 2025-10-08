@@ -132,7 +132,7 @@ class PtyOutputHandler(OutputHandler):
     def __init__(self, output_message: discord.Message, output_filter=None, ctx: Context|None=None):
         super().__init__(output_message, output_filter, ctx)
         self.will_attach = False
-        self.tty = TtyModel(implicit_cr=True)
+        self.tty = TtyModel()
 
     @override
     async def write(self, data: bytes):
