@@ -82,7 +82,8 @@ typedef void (*write_callback)(struct job *jobspec, int source_fd, char *buffer,
 // indicates what kind of transport a job's stdio is using
 enum job_transport {
     TRANSPORT_NULL,
-    TRANSPORT_PIPE
+    TRANSPORT_PIPE,
+    TRANSPORT_PTY
 };
 typedef enum job_transport job_transport_t;
 

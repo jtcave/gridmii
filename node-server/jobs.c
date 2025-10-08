@@ -95,37 +95,66 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
     jobspec->job_id = job_id;
     jobspec->on_write = on_write;
 
-    // create pipes for child stdio
-    int stdin_pipe[2], stdout_pipe[2], stderr_pipe[2];
-    if (pipe(stdout_pipe) != 0) {
-        rv = errno;
-        warn("could not create pipe for stdout");
-        return rv;
-    }
-    jobspec->job_stdout = stdout_pipe[0];
+    // create transport for child stdio
+    jobspec->transport = transport;
+    int stdin_pipe[2] = {-1, -1},
+        stdout_pipe[2] = {-1, -1},
+        stderr_pipe[2] = {-1, -1};
+    int pt_primary = -1;
+    if (transport == TRANSPORT_PIPE) {
+        if (pipe(stdout_pipe) != 0) {
+            rv = errno;
+            warn("could not create pipe for stdout");
+            return rv;
+        }
+        jobspec->job_stdout = stdout_pipe[0];
 
-    if (pipe(stderr_pipe) != 0) {
-        rv = errno;
-        warn("could not create pipe for stdout");
-        return rv;
-    }
-    jobspec->job_stderr = stderr_pipe[0];
+        if (pipe(stderr_pipe) != 0) {
+            rv = errno;
+            warn("could not create pipe for stdout");
+            return rv;
+        }
+        jobspec->job_stderr = stderr_pipe[0];
 
-    if (pipe(stdin_pipe) != 0) {
-        rv = errno;
-        warn("could not create pipe for stdin");
-        return rv;
-    }
-    jobspec->job_stdin = stdin_pipe[1];
-    
-    // we do NOT want to block when writing to the job's stdin
-    rv = fcntl(stdin_pipe[1], F_SETFL, O_NONBLOCK);
-    if (rv == -1) {
-        rv = errno;
-        warn("could not fcntl F_SETFL");
-        return rv;
-    }
+        if (pipe(stdin_pipe) != 0) {
+            rv = errno;
+            warn("could not create pipe for stdin");
+            return rv;
+        }
+        jobspec->job_stdin = stdin_pipe[1];
 
+        // we do NOT want to block when writing to the job's stdin
+        rv = fcntl(stdin_pipe[1], F_SETFL, O_NONBLOCK);
+        if (rv == -1) {
+            rv = errno;
+            warn("could not fcntl F_SETFL");
+            return rv;
+        }
+    }
+    else if (transport == TRANSPORT_PTY) {
+        // Create a PTY
+        pt_primary = posix_openpt(O_RDWR|O_NOCTTY);
+        if (pt_primary == -1) {
+            rv = errno;
+            warn("could not create pty");
+            return rv;
+        }
+        // TODO: set pty write to be non-blocking?
+        jobspec->job_stdout = pt_primary;
+        if ((jobspec->job_stdin = dup(pt_primary)) == -1
+        || (jobspec->job_stderr = dup(pt_primary)) == -1) {
+            close(pt_primary);
+            rv = errno;
+            warn("could not dup pty to stdin/stderr");
+            return rv;
+        }
+        
+    }
+    else {
+        warnx("unknown transport type passed to spawn_job");
+        return EINVAL;
+    }
+        
     // flush stdio before forking
     fflush(stdout);
     fflush(stderr);
@@ -141,6 +170,7 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
         close(stdin_pipe[0]); close(stdin_pipe[1]);
         close(stdout_pipe[0]); close(stdout_pipe[1]);
         close(stderr_pipe[0]); close(stderr_pipe[1]);
+        close(pt_primary);
         return problem_code;
     }
     else if (child_pid == 0) {
@@ -149,30 +179,59 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
         // First we disarm atexit
         gm_in_child = true;
 
-        // Wire up stdio descriptors to the parent.
+        // If we're a pipe job, wire up stdio descriptors to the parent.
         // XXX: These error messages are going to go to the node server console,
         //      not to the user. It'll just look like the job quit with a weird
         //      error code.
-        if (dup2(stdin_pipe[0], STDIN_FILENO) == -1) {
-            err(SPAWN_FAILURE, "could not dup2 stdin while bringing up job");
-        }
-        if (dup2(stdout_pipe[1], STDOUT_FILENO) == -1) {
-            err(SPAWN_FAILURE, "could not dup2 stdout while bringing up job");
-        }
-        if (dup2(stderr_pipe[1], STDERR_FILENO) == -1) {
-            err(SPAWN_FAILURE, "could not dup2 stderr while bringing up job");
-        }
-        // From now on, stderr goes to the parent and the user will see our
-        // error messages.
+        if (transport == TRANSPORT_PIPE) {
+            if (dup2(stdin_pipe[0], STDIN_FILENO) == -1) {
+                err(SPAWN_FAILURE, "could not dup2 stdin while bringing up job");
+            }
+            if (dup2(stdout_pipe[1], STDOUT_FILENO) == -1) {
+                err(SPAWN_FAILURE, "could not dup2 stdout while bringing up job");
+            }
+            if (dup2(stderr_pipe[1], STDERR_FILENO) == -1) {
+                err(SPAWN_FAILURE, "could not dup2 stderr while bringing up job");
+            }
+            // From now on, stderr goes to the parent and the user will see our
+            // error messages.
 
-        // Close the other ends of the pipe.
-        close(stdin_pipe[1]);
-        close(stdout_pipe[0]);
-        close(stderr_pipe[0]);
+            // Close the other ends of the pipe.
+            close(stdin_pipe[1]);
+            close(stdout_pipe[0]);
+            close(stderr_pipe[0]);
+        }
 
         // Next, we enter a new session, detaching from the terminal.
         if (setsid() == -1) {
             err(SPAWN_FAILURE, "could not create session (process group) for job");
+        }
+
+        // If this is a pty job, open the replica, making it the controlling tty.
+        if (transport == TRANSPORT_PTY) {
+            // XXX: as above, these messages won't be sent to the user
+            if (grantpt(pt_primary) == -1 || unlockpt(pt_primary) == -1) {
+                err(SPAWN_FAILURE, "could not grant or unlock replica pty");
+            }
+            const char *replica_path = ptsname(pt_primary);
+            int replica = open(replica_path, O_RDWR);
+            if (replica == -1) {
+                err(SPAWN_FAILURE, "could not open replica pty");
+            }
+
+            // wire up the replica
+            if (dup2(replica, STDIN_FILENO) == -1) {
+                err(SPAWN_FAILURE, "could not dup2 stdin while bringing up job");
+            }
+            if (dup2(replica, STDOUT_FILENO) == -1) {
+                err(SPAWN_FAILURE, "could not dup2 stdout while bringing up job");
+            }
+            if (dup2(replica, STDERR_FILENO) == -1) {
+                err(SPAWN_FAILURE, "could not dup2 stderr while bringing up job");
+            }
+
+            // primary fd isn't needed in the subprocess
+            close(pt_primary);
         }
 
         // chdir to our new working directory
