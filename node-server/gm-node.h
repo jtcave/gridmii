@@ -1,16 +1,23 @@
 // gm-node.h - global declarations for gridmii node server
 
-#include <stdint.h>
-#include <sys/types.h>
-#include <mosquitto.h>
-#include <jansson.h>
-
 #ifndef _GM_NODE_H
 #define _GM_NODE_H
 
 #include "version.h"
 
 #include "gm-node-config.h"
+
+#ifndef _XOPEN_SOURCE
+#define _XOPEN_SOURCE 600
+#endif
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
+#include <stdint.h>
+#include <sys/types.h>
+#include <mosquitto.h>
+#include <jansson.h>
 
 /// declarations - misc system ///
 
