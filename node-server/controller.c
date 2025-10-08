@@ -138,7 +138,7 @@ void on_submit_job(const struct mosquitto_message *message, jid_t jid) {
         static jid_t jid_counter = 777;
         jid = jid_counter++;
     }
-    int rv = submit_job(jid, on_stdout_mqtt, script);
+    int rv = submit_job(jid, on_stdout_mqtt, TRANSPORT_PIPE, script);
     if (rv == 0) {
         gm_publish_job_status(jid, "startup", "");
     }
