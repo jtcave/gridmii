@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <sys/resource.h>
+#include <sys/ioctl.h>
 
 
 struct job *job_with_jid(jid_t jid);
@@ -80,7 +81,7 @@ void init_job_table() {
 
 // Start a job, including the process it monitors
 int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
-                job_transport_t transport, char *const *argv) {
+                struct ttyspec *ttyspec, char *const *argv) {
     int rv;
 
     // reject null callback
@@ -95,6 +96,15 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
 
     jobspec->job_id = job_id;
     jobspec->on_write = on_write;
+
+    // determine the type of transport we're going to use
+    job_transport_t transport;
+    if (ttyspec == NULL || !(ttyspec->set)) {
+        transport = TRANSPORT_PIPE;
+    }
+    else {
+        transport = TRANSPORT_PTY;
+    }
 
     // create transport for child stdio
     jobspec->transport = transport;
@@ -140,21 +150,20 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
             warn("could not create pty");
             return rv;
         }
-        // TODO: set pty write to be non-blocking?
 
-        // dup pt_primary into  stdin
+        // dup pt_primary into stdin
         jobspec->job_stdout = pt_primary;
         if ((jobspec->job_stdin = dup(pt_primary)) == -1) {
-            close(pt_primary);
             rv = errno;
             warn("could not dup pty to stdin/stderr");
+            close(pt_primary);
             return rv;
         }
         // don't bother with a separate stderr fd, it'll all go through the pty
         // anyway, and having two copies of the pty will confuse the event loop
         jobspec->job_stderr = -1;
 
-        
+
     }
     else {
         warnx("unknown transport type passed to spawn_job");
@@ -234,6 +243,16 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
             }
             if (dup2(replica, STDERR_FILENO) == -1) {
                 err(SPAWN_FAILURE, "could not dup2 stderr while bringing up job");
+            }
+
+            // set window size per user request
+            struct winsize wsz;
+            wsz.ws_col = ttyspec->columns;
+            wsz.ws_row = ttyspec->lines;
+            wsz.ws_xpixel = wsz.ws_ypixel = 0;  // these have no objectively true value
+            rv = ioctl(replica, TIOCSWINSZ, &wsz);
+            if (rv == -1) {
+                err(SPAWN_FAILURE, "ioctl TIOCSWINSZ failed while bringing up job");
             }
 
             // primary fd isn't needed in the subprocess
@@ -545,7 +564,8 @@ void job_roll_call() {
 }
 
 // Submit a job by providing a shell command
-int submit_job(jid_t jid, write_callback on_write, job_transport_t transport, const char *command) {
+int submit_job(jid_t jid, write_callback on_write,
+                struct ttyspec *ttyspec, const char *command) {
     // First, put the command in a temporary file to be used as a shell script.
     char *path = malloc(gm_config.tmp_name_size);
     snprintf(path, gm_config.tmp_name_size, "%s/%s", gm_config.tmpdir, TEMP_PATTERN);
@@ -572,7 +592,7 @@ int submit_job(jid_t jid, write_callback on_write, job_transport_t transport, co
     memcpy(jobspec->temp_path, path, gm_config.tmp_name_size);
     
     // actually launch the job
-    int spawn_code = spawn_job(jobspec, jid, on_write, transport, argv);
+    int spawn_code = spawn_job(jobspec, jid, on_write, ttyspec, argv);
     fprintf(stderr, "spawn_job() for jid %d returned %d\n", jid, spawn_code);
     if (spawn_code != 0) {
         job_rm_temp(jobspec);

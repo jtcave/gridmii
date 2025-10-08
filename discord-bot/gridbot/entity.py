@@ -129,10 +129,11 @@ class PtyOutputHandler(OutputHandler):
     """Performs a level of tty emulation on job output"""
     # TODO: detect whether it scrolled
     # TODO: user configurable dimensions
-    def __init__(self, output_message: discord.Message, output_filter=None, ctx: Context|None=None):
+    def __init__(self, output_message: discord.Message, output_filter=None, ctx: Context|None=None,
+                 columns=40, lines=25):
         super().__init__(output_message, output_filter, ctx)
         self.will_attach = False
-        self.tty = TtyModel()
+        self.tty = TtyModel(columns=columns, lines=lines)
 
     @override
     async def write(self, data: bytes):
@@ -268,12 +269,16 @@ class JobTable:
             self._last_jid = 0
 
         def new_job(self, output_message: discord.Message, target_node_name: str, output_filter=filter_backticks,
-                    ctx: Context | None = None, callback = None) -> Job:
+                    ctx: Context | None = None, callback = None, tty_spec:tuple[str,int,int]|None=None) -> Job:
             """Create fresh job object tied to an output message"""
             self._last_jid += 1
             jid = self._last_jid
             # TODO: dispatch
-            output_handler = PtyOutputHandler(output_message, output_filter, ctx)
+            if not tty_spec:
+                output_handler = PipeOutputHandler(output_message, output_filter, ctx)
+            else:
+                _, columns, lines = tty_spec
+                output_handler = PtyOutputHandler(output_message, output_filter, ctx, columns, lines)
             new_job_entry = Job(jid, target_node_name, output_handler, callback)
             self._table[jid] = new_job_entry
             return new_job_entry
@@ -357,14 +362,25 @@ class Node:
                          mq_client: aiomqtt.Client,
                          output_filter=None,
                          ctx: Context|None=None,
-                         callback=None) -> Job:
+                         callback=None,
+                         tty_spec: tuple[str,int,int]|None=None) -> Job:
         """Submit a job to the node"""
-        job = job_table.new_job(output_message, self.node_name, output_filter, ctx, callback)
+        job = job_table.new_job(output_message, self.node_name, output_filter, ctx, callback, tty_spec)
         topic = f"{self.node_name}/submit/{job.jid}"
-        payload = json.dumps({"script": command_string})
+        payload:dict[str,str|dict] = {"script": command_string}
+        if tty_spec:
+            term, columns, lines = tty_spec
+            payload['tty'] = {
+                'term': term,
+                'columns': columns,
+                'lines': lines
+            }
+        payload_string = json.dumps(payload)
+
         logging.debug(f"publishing job {job.jid} to node...")
-        await mq_client.publish(topic, payload=payload, qos=2)
+        await mq_client.publish(topic, payload=payload_string, qos=2)
         logging.debug(f"job {job.jid} published")
+
         return job
 
     async def reload(self, mq_client: aiomqtt.Client):
@@ -402,7 +418,8 @@ class EjectedNode(Node):
                          output_message: discord.Message,
                          mq_client: aiomqtt.Client,
                          output_filter=None,
-                         ctx: Context|None=None) -> RefusedJob:
+                         ctx: Context|None=None,
+                         tty_spec: tuple[str,int,int]|None=None) -> RefusedJob:
         logging.warning(f"tried to submit job to ejected node {self.node_name}")
         await output_message.edit(content=f"Your job was not submitted because node {self.node_name} has been ejected.\nPlease select another node.")
         return RefusedJob(-1, output_message, self.node_name, output_filter)
@@ -501,7 +518,7 @@ class UserPrefs:
 
     def __init__(self):
         self._locus: str|None = None
-        self._tty: tuple[int,int,str]|None = None
+        self._tty: tuple[str,int,int]|None = None
 
     @classmethod
     def get_prefs(cls, user: discord.User) -> Self:
@@ -530,4 +547,13 @@ class UserPrefs:
     def get_locus(cls, user: discord.User) -> Node|None:
         pref = cls.get_prefs(user)
         return pref.locus
+
+    @property
+    def tty(self) -> tuple[str,int,int]|None:
+        """(TERM, columns, lines) or None"""
+        return self._tty
+
+    @tty.setter
+    def tty(self, new_tty:tuple[str,int,int]|None):
+        self._tty = new_tty
 

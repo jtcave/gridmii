@@ -117,6 +117,33 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
         await ctx.reply(table)
 
     @commands.command()
+    async def term(self, ctx: Context, term_name:str|None=None, columns:int=40, lines:int=20):
+        prefs = UserPrefs.get_prefs(ctx.author)
+        if term_name is None:
+            # getter
+            tty_spec = prefs.tty
+            if not tty_spec:
+                content = "tty mode is currently off"
+            else:
+                term, columns, lines = tty_spec
+                content = f"TERM={term}, {columns} x {lines}"
+            await ctx.reply(content)
+        else:
+            # setter
+            if term_name == "off":
+                # turn it off
+                prefs.tty = None
+                await ctx.reply(":+1: tty mode has been turned off")
+            else:
+                # turn it on or adjust the parameters
+                if term_name == "on":
+                    # use the defaults if they say !term on
+                    term_name = "dumb"
+                prefs.tty = (term_name, columns, lines)
+                content = f":+1: tty mode has been turned on\nTERM={term_name}, {columns} x {lines}"
+                await ctx.reply(content)
+
+    @commands.command()
     async def rules(self, ctx: Context):
         """Shows the bot's rules"""
         try:

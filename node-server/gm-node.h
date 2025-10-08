@@ -94,6 +94,14 @@ enum job_transport {
 };
 typedef enum job_transport job_transport_t;
 
+#define TERM_NAME_LEN 32
+struct ttyspec {
+    bool set;
+    char term[TERM_NAME_LEN];
+    int columns;
+    int lines;
+};
+
 // job table entry
 struct job {
     jid_t job_id;                       // global job ID issued by grid controller
@@ -114,7 +122,7 @@ void init_job_table(void);
 
 // Submit a job by providing a shell command
 int submit_job(jid_t jid, write_callback on_write,
-                job_transport_t transport, const char *command);
+                struct ttyspec *ttyspec, const char *command);
 
 // write to job stdin
 int job_stdin_write(jid_t jid, const char *data, size_t len);
