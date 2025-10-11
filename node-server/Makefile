@@ -12,6 +12,13 @@ ifeq "$(OSNAME)" "NetBSD"
         CFLAGS +=  -I/usr/pkg/include -L/usr/pkg/lib
 endif
 
+# Is it SMP wiiu?
+ESPRESSO_COUNT := $(shell grep -c 'Espresso' /proc/cpuinfo 2>/dev/null || echo 0)
+
+ifeq ($(shell [ $(ESPRESSO_COUNT) -ge 3 ] && echo yes),yes)
+    CFLAGS += -mcpu=espresso
+endif
+
 HEADERS = gm-node.h gm-node-config.h version.h
 MODULES = mqtt.c jobs.c controller.c gm-node.c
 
