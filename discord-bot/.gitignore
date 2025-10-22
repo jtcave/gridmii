@@ -5,6 +5,8 @@
 bin/*
 include/*
 lib/*
+share/*
+wormhole_complete.*
 pyvenv.cfg
 *.pyc
 
