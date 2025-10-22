@@ -334,19 +334,36 @@ class NodeTable:
         """Return the node with the exact name given, or throw KeyError"""
         return self._table[node_name]
 
-    def nodes_by_name(self, node_name: str) -> list[Node]:
+    def nodes_by_name(self, target: str) -> list[Node]:
         """
-        Check if we know this node (case-insensitive) by name - return all matches found.
-        If more than 1 match is returned, the caller is expected to ask the user for clarification.
-        If 0 matches are returned, the caller is expected to complain that the node doesn't exist.
+        Fuzzy search for a node based on user input.
+
+        Current heuristics used:
+            * Exact matches take priority ("spam" == "spam")
+            * Case-insensitive search ("spam" matches "Spam")
+            * Prefix search ("spam" matches "spam-and-eggs")
+
+        Returns:
+            * empty list if there are no matches
+            * list of one element if there is only one match
+            * list of multiple elements if the match is ambiguous
         """
         matches = list()
+
+        # case-insensitive search
         for node in self._table.values():
-            if node.node_name == node_name:
+            if node.node_name == target:
                 # exact match, finish the search
                 return [node]
-            elif node.node_name.lower() == node_name.lower():
+            elif node.node_name.lower() == target.lower():
                 # case-insensitive match, add to matches
+                matches.append(node)
+        if matches:
+            return matches
+
+        # prefix search
+        for node in self._table.values():
+            if node.node_name.startswith(target):
                 matches.append(node)
         return matches
 

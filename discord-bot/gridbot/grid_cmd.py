@@ -86,7 +86,7 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
                     prefs.locus = new_locus
                     content = f":+1: Your commands will now run on `{new_locus}`"
                 case _:
-                    content = f":question: `{target}` matches multiple nodes!  Possible options:\n"
+                    content = f":question: `{target}` matches multiple nodes:\n"
                     for node in candidates:
                         content += f"- `{node.node_name}`\n"
                     content += "\nPlease specify exactly one of the above nodes."
