@@ -11,11 +11,14 @@ from discord.ext.commands import errors, Context
 
 from .config import *
 from .entity import Job, Node, UserPrefs, job_table, node_table
-from .grid_cmd import DEFAULT_COGS, JobControlCog
+from .grid_cmd import UserCommandCog, AdminCommandCog, JobControlCog, AutoRollCallCog
+from .xfer import FileTransferCog
 from .neofetch import NeofetchCog
 from .cmd_denylist import permit_command
 from .get_version import GIT_VERSION
 
+
+DEFAULT_COGS = (UserCommandCog, AdminCommandCog, JobControlCog, AutoRollCallCog, FileTransferCog)
 
 ## discord part ##
 
