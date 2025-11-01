@@ -1,5 +1,7 @@
 # jetbrains junk
 .idea/*
+*.lock
+_trial_temp/*
 
 # leave the venv stuff out
 bin/*
@@ -12,3 +14,5 @@ pyvenv.cfg
 data/*.json
 data/*.sqlite
 data/*.toml
+data/*.pem
+data/oci-config
