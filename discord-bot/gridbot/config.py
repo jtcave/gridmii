@@ -5,7 +5,21 @@ import discord
 
 
 class Config:
-
+    # These defaults are used during testing,
+    # You still need to call load_config to fill these with sensible data.
+    TOKEN: str = ""
+    GUILD: discord.Object|None = None
+    CHANNEL: str|None = None
+    ADMIN_ROLES: list[int] = []
+    BANNED_USERS: list[int] = []
+    BROKER: str = ""
+    PORT: int = 0
+    MQTT_TLS: bool = False
+    MQTT_USERNAME: str = ""
+    MQTT_PASSWORD: str = ""
+    NOTIFY_LIMIT: int = 60
+    MIN_REPORT_SEC: int = 1
+    OCI_CONFIG_FILE: str|None = None
 
     @classmethod
     def load_config(cls, config_path: str):

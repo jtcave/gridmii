@@ -42,7 +42,8 @@ class Job:
     # this magic number is the mas number of characters a Discord message can have (without a Nitro sub)
     MESSAGE_LIMIT = 2000
 
-    def __init__(self, jid: int, output_message: discord.Message, target_node_name: str, output_filter=None, ctx: Context|None=None):
+    def __init__(self, jid: int, output_message: discord.Message, target_node_name: str,
+                 output_filter=None, ctx: Context|None=None, callback=None):
         self.jid = jid
         self.output_buffer = io.BytesIO()
         self.output_message = output_message
@@ -53,6 +54,7 @@ class Job:
         self.target_node = target_node_name
         self.filter = output_filter if output_filter else (lambda x: x)
         self.ctx = ctx
+        self.callback = callback    # async def callback(job: Job, exit_status: int|None): ...
 
     def buffer_contents(self) -> str:
         """Return the contents of the output buffer."""
@@ -131,6 +133,7 @@ class Job:
             result_code = int(result)
             status = disposition(result_code)
         else:
+            result_code = None
             status = "The job was abandoned"
 
         # difference between current time vs start time, human-readable
@@ -167,6 +170,8 @@ class Job:
         await self.output_message.edit(content=content)
         self.output_buffer.close()
         del job_table._table[self.jid]
+        if self.callback is not None:
+            await self.callback(self, result_code)
 
     def tail(self, lines: int) -> list[str]:
         """Return the last few lines of job output"""
@@ -273,9 +278,10 @@ class Node:
                          output_message: discord.Message,
                          mq_client: aiomqtt.Client,
                          output_filter=None,
-                         ctx: Context|None=None) -> Job:
+                         ctx: Context|None=None,
+                         callback=None) -> Job:
         """Submit a job to the node"""
-        job = job_table.new_job(output_message, self.node_name, output_filter, ctx)
+        job = job_table.new_job(output_message, self.node_name, output_filter, ctx, callback)
         topic = f"{self.node_name}/submit/{job.jid}"
         payload = json.dumps({"script": command_string})
         logging.debug(f"publishing job {job.jid} to node...")

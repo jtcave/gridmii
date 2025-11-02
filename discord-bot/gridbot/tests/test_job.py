@@ -74,6 +74,25 @@ class JobTests(unittest.IsolatedAsyncioTestCase):
         await job.startup()
         self.assertTrue(job.started)
         self.assertGreaterEqual(job.start_time, moment) # job started after the moment
+        self.assertTrue(table.jid_present(job.jid))
+
+    async def test_callbacks(self):
+        callback_fired = False
+        status = b'0'
+        async def callback(job, exit_status):
+            nonlocal callback_fired
+            self.assertEqual(exit_status, int(status))
+            self.assertIsInstance(job, Job)
+            callback_fired = True
+        table = JobTable()
+        message = mock_message()
+
+        with mock.patch("gridbot.entity.job_table", new=table):
+            job = table.new_job(message, "test-node")
+            job.callback = callback
+            await job.startup()
+            await job.stopped(status)
+            self.assertTrue(callback_fired)
 
 
 if __name__ == '__main__':

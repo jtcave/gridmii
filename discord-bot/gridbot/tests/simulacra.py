@@ -19,3 +19,9 @@ def mock_context():
 
 def mock_message():
     return mock.AsyncMock()
+
+def mock_config():
+    class FakeConfig: pass
+    FakeConfig.NOTIFY_LIMIT = 600
+    FakeConfig.MIN_REPORT_SEC = 600
+    return FakeConfig
