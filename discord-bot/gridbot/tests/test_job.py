@@ -88,8 +88,7 @@ class JobTests(unittest.IsolatedAsyncioTestCase):
         message = mock_message()
 
         with mock.patch("gridbot.entity.job_table", new=table):
-            job = table.new_job(message, "test-node")
-            job.callback = callback
+            job = table.new_job(message, "test-node", callback=callback)
             await job.startup()
             await job.stopped(status)
             self.assertTrue(callback_fired)

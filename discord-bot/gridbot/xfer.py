@@ -1,7 +1,12 @@
+import datetime
+import io
 import logging
+import secrets
 
+import discord
 import discord.ext.commands as commands
 from discord.ext.commands import Context
+import aiohttp
 
 from .grid_cmd import GridMiiCogBase
 from .config import Config
@@ -32,7 +37,7 @@ class FileTransferCog(GridMiiCogBase):
     then
       echo Downloading:
       echo '{0}'
-      curl -Os '{0}'
+      curl -OsS '{0}'
     else
       echo Please install curl, then download this url:
       echo '{0}'
@@ -40,23 +45,30 @@ class FileTransferCog(GridMiiCogBase):
     """
 
     DOWNLOAD_SCRIPT = """
-    if command -v curl > /dev/null
+    f='{0}'
+    if ! command -v curl > /dev/null
     then
-      echo Uploading:
-      echo '{0}'
-      curl -s -T '{0}' '{1}'
-    else
       echo Please install curl
       exit 1
+    else
+      if [ $(du -k "$f" | cut -f 1) -gt 8192 ]
+      then
+        echo File too large
+        exit 2
+      else
+        echo Uploading:
+        echo "$f"
+        curl -sS -T "$f" '{1}'
+      fi
     fi
     """
 
     def __init__(self, bot):
         super().__init__(bot)
         self.oci_ok = False
-        self.object_storage = None
+        self.object_storage: oci.object_storage.ObjectStorageClient|None = None
         self.object_namespace = None
-        self.bucket = None
+        self.bucket: oci.object_storage.models.Bucket|None = None
 
     async def cog_load(self) -> None:
         # TODO: split this into an OracleCloudCog
@@ -85,6 +97,40 @@ class FileTransferCog(GridMiiCogBase):
                 logging.exception(f"{se.code}: {se.message}")
                 self.oci_ok = False
 
+    def make_par(self, object_name: str) -> oci.object_storage.models.PreauthenticatedRequest:
+        now = datetime.datetime.now(datetime.timezone.utc)
+        expiration_delta = datetime.timedelta(days=1)
+        expiration = now + expiration_delta
+        par_params = oci.object_storage.models.CreatePreauthenticatedRequestDetails(
+            name="par_" + object_name,
+            object_name = object_name,
+            access_type="ObjectReadWrite",
+            time_expires=expiration
+        )
+        par = self.object_storage.create_preauthenticated_request(
+            self.bucket.namespace, self.bucket.name, par_params).data
+        return par
+
+    async def download_and_attach(self, ctx: Context, url: str, file_name: str):
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    logging.error("HTTP problem", response)
+                    await ctx.reply(f":x: Couldn't download the file from the relay: HTTP {response.status}")
+                    return
+
+                body = io.BytesIO()
+                try:
+                    body.write(await response.read())
+                    body.seek(0)
+                    attachment = discord.File(body, file_name)
+                    await ctx.reply(file=attachment)
+                except aiohttp.ClientError as exc:
+                    logging.exception(f"Failed download for file {file_name}")
+                    await ctx.reply(f":x: Couldn't download the file from the relay: {exc}")
+                finally:
+                    body.close()
+
     @commands.command()
     async def upload(self, ctx: Context):
         """Upload the attached file to your current node. Requires curl to be installed"""
@@ -105,4 +151,17 @@ class FileTransferCog(GridMiiCogBase):
         if not self.oci_ok:
             await ctx.reply(":x: File downloads are not currently available")
             return
-        await ctx.reply("***TODO STUB***, but OCI is operational :+1:")
+
+        logging.info(f"Downloading file {file}")
+        relay_object_name = secrets.token_urlsafe()
+        par = self.make_par(relay_object_name)
+        par_url =  par.full_path
+        logging.info(f"Access URL for relay upload: {par_url}")
+
+        # pass the URI to the client, then make a callback
+        script = self.DOWNLOAD_SCRIPT.format(file, par_url)
+        async def download_ready(job, status_code):
+            if status_code == 0:
+                await self.download_and_attach(ctx, par_url, file)
+
+        await self.bot.submit_job(ctx, script, callback=download_ready)

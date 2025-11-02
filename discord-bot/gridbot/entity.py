@@ -195,11 +195,11 @@ class JobTable:
             self._last_jid = 0
 
         def new_job(self, output_message: discord.Message, target_node_name: str, output_filter=filter_backticks,
-                    ctx: Context | None = None) -> Job:
+                    ctx: Context | None = None, callback = None) -> Job:
             """Create fresh job object tied to an output message"""
             self._last_jid += 1
             jid = self._last_jid
-            new_job_entry = Job(jid, output_message, target_node_name, output_filter, ctx)
+            new_job_entry = Job(jid, output_message, target_node_name, output_filter, ctx, callback)
             self._table[jid] = new_job_entry
             return new_job_entry
 
