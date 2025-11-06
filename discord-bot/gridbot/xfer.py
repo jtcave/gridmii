@@ -133,7 +133,7 @@ class FileTransferCog(GridMiiCogBase):
 
     @commands.command()
     async def upload(self, ctx: Context):
-        """Upload the attached file to your current node. Requires curl to be installed"""
+        """Upload the attached file to your current node."""
         attachments = ctx.message.attachments
         if not attachments:
             await ctx.reply(":x: You need to attach one or more files")
@@ -148,6 +148,7 @@ class FileTransferCog(GridMiiCogBase):
 
     @commands.command()
     async def download(self, ctx: Context, file: str):
+        """Download the given file from your current node"""
         if not self.oci_ok:
             await ctx.reply(":x: File downloads are not currently available")
             return
