@@ -287,4 +287,7 @@ class AutoRollCallCog(GridMiiCogBase):
             logging.info("performing roll call")
             await self.mq_client.publish("grid/roll_call", qos=2)
 
-DEFAULT_COGS = (UserCommandCog, AdminCommandCog, JobControlCog, AutoRollCallCog)
+
+
+
+

@@ -11,11 +11,14 @@ from discord.ext.commands import errors, Context
 
 from .config import *
 from .entity import Job, Node, UserPrefs, job_table, node_table
-from .grid_cmd import DEFAULT_COGS, JobControlCog
+from .grid_cmd import UserCommandCog, AdminCommandCog, JobControlCog, AutoRollCallCog
+from .xfer import FileTransferCog
 from .neofetch import NeofetchCog
 from .cmd_denylist import permit_command
 from .get_version import GIT_VERSION
 
+
+DEFAULT_COGS = (UserCommandCog, AdminCommandCog, JobControlCog, AutoRollCallCog, FileTransferCog)
 
 ## discord part ##
 
@@ -256,7 +259,7 @@ class GridMiiBot(FlexBot):
 
 
 
-    async def submit_job(self, ctx: Context, command_string: str, output_filter=None):
+    async def submit_job(self, ctx: Context, command_string: str, output_filter=None, callback=None):
         if self.mq_client is None:
             logging.error("GridMiiBot.mq_client is None!")
             await ctx.send("**Internal error:** Couldn't submit a job because the MQTT client is not initialized")
@@ -283,7 +286,7 @@ class GridMiiBot(FlexBot):
 
         # Submit the job
         try:
-            job = await node.submit_job(command_string, reply, self.mq_client, output_filter, ctx)
+            job = await node.submit_job(command_string, reply, self.mq_client, output_filter, ctx, callback)
             bot.loop.create_task(job.clean_if_unstarted())
         except aiomqtt.exceptions.MqttError as ex_mq:
             logging.exception("error publishing job submission")

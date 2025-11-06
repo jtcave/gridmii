@@ -45,3 +45,9 @@ notify_limit = 60
 #            when it finishes (successful or not)
 # Default: 1
 min_report_limit = 1
+
+# Optional - Path to OCI configuration file. If this is not
+#            set, services that use Oracle Cloud won't be
+#            available.
+# Default: None
+oci_config_file = "data/oci-config"
