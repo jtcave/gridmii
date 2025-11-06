@@ -97,7 +97,7 @@ class FileTransferCog(GridMiiCogBase):
                 logging.exception(f"{se.code}: {se.message}")
                 self.oci_ok = False
 
-    def make_par(self, object_name: str) -> oci.object_storage.models.PreauthenticatedRequest:
+    def make_par(self, object_name: str):
         now = datetime.datetime.now(datetime.timezone.utc)
         expiration_delta = datetime.timedelta(days=1)
         expiration = now + expiration_delta
