@@ -1,5 +1,7 @@
 // jobs.c - job and subprocess management
 
+#include "gm-node.h"
+
 #include <errno.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -11,8 +13,8 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <sys/resource.h>
+#include <sys/ioctl.h>
 
-#include "gm-node.h"
 
 struct job *job_with_jid(jid_t jid);
 void close_job_fd(struct job *jobspec, int fd);
@@ -78,7 +80,8 @@ void init_job_table() {
 }
 
 // Start a job, including the process it monitors
-int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write, char *const *argv) {
+int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
+                struct ttyspec *ttyspec, char *const *argv) {
     int rv;
 
     // reject null callback
@@ -94,37 +97,79 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write, char *
     jobspec->job_id = job_id;
     jobspec->on_write = on_write;
 
-    // create pipes for child stdio
-    int stdin_pipe[2], stdout_pipe[2], stderr_pipe[2];
-    if (pipe(stdout_pipe) != 0) {
-        rv = errno;
-        warn("could not create pipe for stdout");
-        return rv;
+    // determine the type of transport we're going to use
+    job_transport_t transport;
+    if (ttyspec == NULL || !(ttyspec->set)) {
+        transport = TRANSPORT_PIPE;
     }
-    jobspec->job_stdout = stdout_pipe[0];
-
-    if (pipe(stderr_pipe) != 0) {
-        rv = errno;
-        warn("could not create pipe for stdout");
-        return rv;
-    }
-    jobspec->job_stderr = stderr_pipe[0];
-
-    if (pipe(stdin_pipe) != 0) {
-        rv = errno;
-        warn("could not create pipe for stdin");
-        return rv;
-    }
-    jobspec->job_stdin = stdin_pipe[1];
-    
-    // we do NOT want to block when writing to the job's stdin
-    rv = fcntl(stdin_pipe[1], F_SETFL, O_NONBLOCK);
-    if (rv == -1) {
-        rv = errno;
-        warn("could not fcntl F_SETFL");
-        return rv;
+    else {
+        transport = TRANSPORT_PTY;
     }
 
+    // create transport for child stdio
+    jobspec->transport = transport;
+    int stdin_pipe[2] = {-1, -1},
+        stdout_pipe[2] = {-1, -1},
+        stderr_pipe[2] = {-1, -1};
+    int pt_primary = -1;
+    if (transport == TRANSPORT_PIPE) {
+        if (pipe(stdout_pipe) != 0) {
+            rv = errno;
+            warn("could not create pipe for stdout");
+            return rv;
+        }
+        jobspec->job_stdout = stdout_pipe[0];
+
+        if (pipe(stderr_pipe) != 0) {
+            rv = errno;
+            warn("could not create pipe for stdout");
+            return rv;
+        }
+        jobspec->job_stderr = stderr_pipe[0];
+
+        if (pipe(stdin_pipe) != 0) {
+            rv = errno;
+            warn("could not create pipe for stdin");
+            return rv;
+        }
+        jobspec->job_stdin = stdin_pipe[1];
+
+        // we do NOT want to block when writing to the job's stdin
+        rv = fcntl(stdin_pipe[1], F_SETFL, O_NONBLOCK);
+        if (rv == -1) {
+            rv = errno;
+            warn("could not fcntl F_SETFL");
+            return rv;
+        }
+    }
+    else if (transport == TRANSPORT_PTY) {
+        // Create a PTY
+        pt_primary = posix_openpt(O_RDWR|O_NOCTTY);
+        if (pt_primary == -1) {
+            rv = errno;
+            warn("could not create pty");
+            return rv;
+        }
+
+        // dup pt_primary into stdin
+        jobspec->job_stdout = pt_primary;
+        if ((jobspec->job_stdin = dup(pt_primary)) == -1) {
+            rv = errno;
+            warn("could not dup pty to stdin/stderr");
+            close(pt_primary);
+            return rv;
+        }
+        // don't bother with a separate stderr fd, it'll all go through the pty
+        // anyway, and having two copies of the pty will confuse the event loop
+        jobspec->job_stderr = -1;
+
+
+    }
+    else {
+        warnx("unknown transport type passed to spawn_job");
+        return EINVAL;
+    }
+        
     // flush stdio before forking
     fflush(stdout);
     fflush(stderr);
@@ -140,6 +185,7 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write, char *
         close(stdin_pipe[0]); close(stdin_pipe[1]);
         close(stdout_pipe[0]); close(stdout_pipe[1]);
         close(stderr_pipe[0]); close(stderr_pipe[1]);
+        close(pt_primary);
         return problem_code;
     }
     else if (child_pid == 0) {
@@ -148,30 +194,75 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write, char *
         // First we disarm atexit
         gm_in_child = true;
 
-        // Wire up stdio descriptors to the parent.
+        // If we're a pipe job, wire up stdio descriptors to the parent.
         // XXX: These error messages are going to go to the node server console,
         //      not to the user. It'll just look like the job quit with a weird
         //      error code.
-        if (dup2(stdin_pipe[0], STDIN_FILENO) == -1) {
-            err(SPAWN_FAILURE, "could not dup2 stdin while bringing up job");
-        }
-        if (dup2(stdout_pipe[1], STDOUT_FILENO) == -1) {
-            err(SPAWN_FAILURE, "could not dup2 stdout while bringing up job");
-        }
-        if (dup2(stderr_pipe[1], STDERR_FILENO) == -1) {
-            err(SPAWN_FAILURE, "could not dup2 stderr while bringing up job");
-        }
-        // From now on, stderr goes to the parent and the user will see our
-        // error messages.
+        if (transport == TRANSPORT_PIPE) {
+            if (dup2(stdin_pipe[0], STDIN_FILENO) == -1) {
+                err(SPAWN_FAILURE, "could not dup2 stdin while bringing up job");
+            }
+            if (dup2(stdout_pipe[1], STDOUT_FILENO) == -1) {
+                err(SPAWN_FAILURE, "could not dup2 stdout while bringing up job");
+            }
+            if (dup2(stderr_pipe[1], STDERR_FILENO) == -1) {
+                err(SPAWN_FAILURE, "could not dup2 stderr while bringing up job");
+            }
+            // From now on, stderr goes to the parent and the user will see our
+            // error messages.
 
-        // Close the other ends of the pipe.
-        close(stdin_pipe[1]);
-        close(stdout_pipe[0]);
-        close(stderr_pipe[0]);
+            // Close the other ends of the pipe.
+            close(stdin_pipe[1]);
+            close(stdout_pipe[0]);
+            close(stderr_pipe[0]);
+        }
 
         // Next, we enter a new session, detaching from the terminal.
         if (setsid() == -1) {
             err(SPAWN_FAILURE, "could not create session (process group) for job");
+        }
+
+        // If this is a pty job, open the replica, making it the controlling tty.
+        if (transport == TRANSPORT_PTY) {
+            // XXX: as above, these messages won't be sent to the user
+            if (grantpt(pt_primary) == -1 || unlockpt(pt_primary) == -1) {
+                err(SPAWN_FAILURE, "could not grant or unlock replica pty");
+            }
+            const char *replica_path = ptsname(pt_primary);
+            int replica = open(replica_path, O_RDWR);
+            if (replica == -1) {
+                err(SPAWN_FAILURE, "could not open replica pty");
+            }
+
+            // primary fd isn't needed in the subprocess
+            close(pt_primary);
+
+            // wire up the replica
+            if (dup2(replica, STDIN_FILENO) == -1) {
+                err(SPAWN_FAILURE, "could not dup2 stdin while bringing up job");
+            }
+            if (dup2(replica, STDOUT_FILENO) == -1) {
+                err(SPAWN_FAILURE, "could not dup2 stdout while bringing up job");
+            }
+            if (dup2(replica, STDERR_FILENO) == -1) {
+                err(SPAWN_FAILURE, "could not dup2 stderr while bringing up job");
+            }
+
+            // export TERM
+            rv = setenv("TERM", ttyspec->term, 1);
+            if (rv == -1) {
+                warn("could not set TERM");
+            }
+
+            // set window size per user request
+            struct winsize wsz;
+            wsz.ws_col = ttyspec->columns;
+            wsz.ws_row = ttyspec->lines;
+            wsz.ws_xpixel = wsz.ws_ypixel = 0;  // these have no objectively true value
+            rv = ioctl(replica, TIOCSWINSZ, &wsz);
+            if (rv == -1) {
+                err(SPAWN_FAILURE, "ioctl TIOCSWINSZ failed while bringing up job");
+            }
         }
 
         // chdir to our new working directory
@@ -292,16 +383,24 @@ void poll_job_output(struct job *jobspec) {
         // we might be able to do some reads, check our fds
 
         for (int i = 0; i <= 1; i++) {
-            if (polls[i].revents & (POLLIN|POLLHUP)) {
+            if (polls[i].revents & POLLIN) {
                 read_count = read(polls[i].fd, buffer, BUFFER_SIZE);
                 if (read_count == -1) {
-                    warn("error reading from job pipe");
+                    // if it's EIO then maybe it's just the pty being closed
+                    if (errno != EIO || jobspec->transport != TRANSPORT_PTY) {
+                        warn("error reading from job fd");
+                    }
                 }
                 jobspec->on_write(jobspec, polls[i].fd, buffer, read_count);
-                if (read_count == 0) {
+                if (read_count <= 0) {
                     // EOF
                     close_job_fd(jobspec, polls[i].fd);
                 }
+            }
+            else if (polls[i].revents & POLLHUP) {
+                // hangup, so just close the fd
+                jobspec->on_write(jobspec, polls[i].fd, buffer, 0);
+                close_job_fd(jobspec, polls[i].fd);
             }
         }
     }
@@ -471,7 +570,8 @@ void job_roll_call() {
 }
 
 // Submit a job by providing a shell command
-int submit_job(jid_t jid, write_callback on_write, const char *command) {
+int submit_job(jid_t jid, write_callback on_write,
+                struct ttyspec *ttyspec, const char *command) {
     // First, put the command in a temporary file to be used as a shell script.
     char *path = malloc(gm_config.tmp_name_size);
     snprintf(path, gm_config.tmp_name_size, "%s/%s", gm_config.tmpdir, TEMP_PATTERN);
@@ -492,13 +592,13 @@ int submit_job(jid_t jid, write_callback on_write, const char *command) {
     if (jobspec == NULL) {
         // this seems to be a semi-reasonable error return for "no job slots available"
         free(path);
-        return EUSERS;
+        return EBUSY;
     }
     // stash path to script
     memcpy(jobspec->temp_path, path, gm_config.tmp_name_size);
     
     // actually launch the job
-    int spawn_code = spawn_job(jobspec, jid, on_write, argv);
+    int spawn_code = spawn_job(jobspec, jid, on_write, ttyspec, argv);
     fprintf(stderr, "spawn_job() for jid %d returned %d\n", jid, spawn_code);
     if (spawn_code != 0) {
         job_rm_temp(jobspec);
