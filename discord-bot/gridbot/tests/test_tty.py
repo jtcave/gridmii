@@ -61,13 +61,18 @@ class BasicTtyTests(unittest.TestCase):
         actual = '\n'.join(line.strip() for line in rendered_lines)
         self.assertEqual(expected, actual)
 
-    @unittest.expectedFailure
     def test_unicode_print(self):
-        TEST_STR = "think🤔ing"
-        tty = TtyModel(columns=9)
-        tty.write(TEST_STR.encode())
-        actual = tty.render().strip()
-        self.assertEqual(TEST_STR, actual)
+        TEST_STRS = (
+            "normal",       # no wide characters
+            "pokémon",      # two bytes
+            "deadly☉lazer", # three bytes
+            "think🤔ing",   # four bytes
+            "é🤔é☉☉🤔")     # back to back
+        for test_string in TEST_STRS:
+            tty = TtyModel(columns=12)
+            tty.write(test_string.encode())
+            actual = tty.render().strip()
+            self.assertEqual(test_string, actual)
 
 class ControlC0Tests(unittest.TestCase):
     def test_backspace(self):
