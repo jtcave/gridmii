@@ -581,7 +581,10 @@ int submit_job(jid_t jid, write_callback on_write,
         warn("could not create temp file for job script");
         return rv;
     }
-    int buf_len = strnlen(command, JOB_SCRIPT_LIMIT);
+    int buf_len = strlen(command);
+    if (buf_len > JOB_SCRIPT_LIMIT) {
+        buf_len = JOB_SCRIPT_LIMIT;
+    }
     write(scriptfd, command, buf_len);
     write(scriptfd, "\n", 1);
     close(scriptfd);
