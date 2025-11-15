@@ -1,4 +1,6 @@
 # output files
+bin
+build
 *.o
 *.dSYM
 .DS_Store

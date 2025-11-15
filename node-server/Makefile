@@ -12,20 +12,32 @@ ifeq "$(OSNAME)" "NetBSD"
         CFLAGS +=  -I/usr/pkg/include -L/usr/pkg/lib
 endif
 
-HEADERS = gm-node.h gm-node-config.h version.h
+# source directory
+SOURCE = src
+
+HEADERS = $(SOURCE)/gm-node.h $(SOURCE)/gm-node-config.h $(SOURCE)/version.h
+
 MODULES = mqtt.c jobs.c controller.c gm-node.c
+
+OUT = bin/gm-node
+OBJ = $(patsubst %.c,build/%.o,$(MODULES))
 
 GIT_VERSION := "$(shell git describe --dirty --always --tags)"
 
-all: gm-node
+all: $(OUT)
 
-version.h: ../.git/index
-	printf '#ifndef GIT_VERSION\n#define GIT_VERSION "%s"\n#endif\n' "$(GIT_VERSION)" > version.h
+$(SOURCE)/version.h: ../.git/index
+	printf '#ifndef GIT_VERSION\n#define GIT_VERSION "%s"\n#endif\n' "$(GIT_VERSION)" > $@
 
-gm-node.h: version.h
+$(SOURCE)/gm-node.h: $(SOURCE)/version.h
 
-gm-node: $(HEADERS) $(MODULES)
-	$(CC) $(CFLAGS) -o gm-node  $(MODULES) $(LDLIBS)
+$(OUT): $(HEADERS) $(OBJ)
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -o $(OUT) $(OBJ) $(LDLIBS)
+
+build/%.o: $(SOURCE)/%.c
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) -o $@ -c $<
 
 clean:
 	rm -rf gm-node *.o *.dSYM version.h

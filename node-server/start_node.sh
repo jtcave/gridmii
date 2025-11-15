@@ -2,7 +2,7 @@
 
 if [ "z$NODE_BIN" = "z" ]
 then
-    NODE_BIN="./gm-node"
+    NODE_BIN="bin/gm-node"
 fi
 CONFIG_FILE="gm-node.conf"
 CERT_FILE="gridmii.crt"
