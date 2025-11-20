@@ -127,7 +127,7 @@ class GridMiiBot(FlexBot):
 
         self.mq_client = aiomqtt.Client(Config.BROKER, Config.PORT,
                                         username=Config.MQTT_USERNAME, password=Config.MQTT_PASSWORD,
-                                        tls_params=tls_params)
+                                        tls_params=tls_params, keepalive=Config.KEEPALIVE)
         while True:
             try:
                 async with self.mq_client:

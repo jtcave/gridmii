@@ -35,6 +35,10 @@ mqtt_username = "epic_user"
 # Default: ""
 mqtt_password = "alpine"
 
+# Optional - MQTT Keepalive
+# Default: 60
+mqtt_keepalive = 90
+
 # Optional - Minimum limit, in seconds, to ping a user when
 #            an ongoing job finishes (successful or not)
 # Default: 60

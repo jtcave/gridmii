@@ -17,6 +17,7 @@ class Config:
     MQTT_TLS: bool = False
     MQTT_USERNAME: str = ""
     MQTT_PASSWORD: str = ""
+    KEEPALIVE: int = 60
     NOTIFY_LIMIT: int = 60
     MIN_REPORT_SEC: int = 1
     OCI_CONFIG_FILE: str|None = None
@@ -37,6 +38,7 @@ class Config:
             cls.MQTT_TLS = config.get("mqtt_tls", False)
             cls.MQTT_USERNAME = config.get("mqtt_username", "")
             cls.MQTT_PASSWORD = config.get("mqtt_password", "")
+            cls.KEEPALIVE = config.get("mqtt_keepalive", 60)
             # job completion notification
             cls.NOTIFY_LIMIT = config.get("notify_limit", 60)
             cls.MIN_REPORT_SEC = config.get("min_report_sec", 1)
