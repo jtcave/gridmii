@@ -271,7 +271,7 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
         }
 
         // the new process will inherit a scrubbed version of our environment
-        // TODO: this really should be an allowlist instead of a denylist
+        // XXX: this really should be an allowlist instead of a denylist
         const char *env_key = envs_to_scrub[0];
         int i = 0;
         while (env_key != NULL) {
@@ -365,7 +365,7 @@ void poll_job_output(struct job *jobspec) {
     int read_count;
 
     // assemble poll array for job stdout and stderr
-    // TODO: shouldn't this just be done once and stored in the job table?
+    // XXX: shouldn't this just be done once and stored in the job table?
     struct pollfd polls[2];
     polls[0].fd = jobspec->job_stdout;
     polls[1].fd = jobspec->job_stderr;

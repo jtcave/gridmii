@@ -128,7 +128,6 @@ class PipeOutputHandler(OutputHandler):
 class PtyOutputHandler(OutputHandler):
     """Performs a level of tty emulation on job output"""
     # TODO: detect whether it scrolled
-    # TODO: user configurable dimensions
     def __init__(self, output_message: discord.Message, output_filter=None, ctx: Context|None=None,
                  columns=40, lines=25):
         super().__init__(output_message, output_filter, ctx)
@@ -273,7 +272,6 @@ class JobTable:
             """Create fresh job object tied to an output message"""
             self._last_jid += 1
             jid = self._last_jid
-            # TODO: dispatch
             if not tty_spec:
                 output_handler = PipeOutputHandler(output_message, output_filter, ctx)
             else:
@@ -304,12 +302,12 @@ class JobTable:
 
 job_table = JobTable()
 
-# noinspection PyMissingConstructor
-# TODO: realign with new Job ctor
+
 class RefusedJob(Job):
     """A stub that represents a job that the controller has refused to submit."""
 
     # noinspection PyUnusedLocal
+    # noinspection PyMissingConstructor
     def __init__(self, jid: int, output_message: discord.Message, target_node_name: str, output_filter=None, ctx: Context|None=None):
         self.jid = jid
         # self.output_buffer is not allowed to be accessed
