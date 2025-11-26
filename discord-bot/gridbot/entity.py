@@ -413,13 +413,9 @@ class EjectedNode(Node):
     def can_accept_jobs(self):
         return False
 
-    async def submit_job(self,
-                         command_string: str,
-                         output_message: discord.Message,
-                         mq_client: aiomqtt.Client,
-                         output_filter=None,
-                         ctx: Context|None=None,
-                         tty_spec: tuple[str,int,int]|None=None) -> RefusedJob:
+    async def submit_job(self, command_string: str, output_message: discord.Message, mq_client: aiomqtt.Client,
+                         output_filter=None, ctx: Context | None = None, tty_spec: tuple[str, int, int] | None = None,
+                         **kwargs) -> RefusedJob:
         logging.warning(f"tried to submit job to ejected node {self.node_name}")
         await output_message.edit(content=f"Your job was not submitted because node {self.node_name} has been ejected.\nPlease select another node.")
         return RefusedJob(-1, output_message, self.node_name, output_filter)
