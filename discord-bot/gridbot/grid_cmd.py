@@ -98,10 +98,14 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
         """View running jobs"""
         def _line(job: Job):
             output_message = job.output_handler.output_message
-            author = output_message.author
+            job_ctx = job.output_handler.ctx
 
-            # not everybody has a nickname, fall back to username in that case
-            name = author.nick if author.nick else author.name
+            if job_ctx:
+                author = job_ctx.author
+                # not everybody has a nickname, fall back to username in that case
+                name = author.nick if author.nick else author.name
+            else:
+                name = "None"
 
             # calculate and format elapsed time
             cur_time = time.monotonic()
