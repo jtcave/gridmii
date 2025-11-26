@@ -147,7 +147,7 @@ class GridMiiBot(FlexBot):
                 reconnect_delay = 3
                 logging.exception(f"Lost connection to broker. Retrying in {reconnect_delay} seconds")
                 await asyncio.sleep(reconnect_delay)
-            except discord.DiscordException as dis_exc:
+            except discord.DiscordException:
                 # log discord exceptions
                 logging.exception("discord.py exception in MQTT task")
             except Exception as exc:

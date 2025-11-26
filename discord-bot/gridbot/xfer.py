@@ -161,7 +161,7 @@ class FileTransferCog(GridMiiCogBase):
 
         # pass the URI to the client, then make a callback
         script = self.DOWNLOAD_SCRIPT.format(file, par_url)
-        async def download_ready(job, status_code):
+        async def download_ready(_, status_code):
             if status_code == 0:
                 await self.download_and_attach(ctx, par_url, file)
 

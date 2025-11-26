@@ -6,6 +6,8 @@ import discord.ext.tasks as tasks
 from discord.ext.commands import Context
 from .entity import *
 
+
+# noinspection SpellCheckingInspection
 class GridMiiCogBase(commands.Cog):
     """Base class for GridMii cogs"""
     def __init__(self, bot: commands.Bot):
@@ -36,6 +38,8 @@ class GridMiiCogBase(commands.Cog):
         client: aiomqtt.Client = getattr(self.bot, "mq_client")
         return client
 
+
+# noinspection SpellCheckingInspection
 class UserCommandCog(GridMiiCogBase, name="User Commands"):
     """Cog for GridMii commands regular users can use"""
     @commands.command(name="yougood")
@@ -158,6 +162,8 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
             logging.error("data/rules.md not found")
             await ctx.reply("rules file not found")
 
+
+# noinspection SpellCheckingInspection
 class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
     """Cog for commands only admins can use"""
     async def cog_check(self, ctx: Context) -> bool:
@@ -239,6 +245,7 @@ class AdminCommandCog(GridMiiCogBase, name="Admin Commands"):
         await ctx.reply(":+1:")
 
 
+# noinspection SpellCheckingInspection
 class JobControlCog(GridMiiCogBase, name="Job Control"):
     """Cog that contains commands to interact with a running job.
     For all of these commands, the job is specified by sending a command as a reply to the job's status/output message"""

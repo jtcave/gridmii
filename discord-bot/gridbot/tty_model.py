@@ -3,10 +3,10 @@ import enum
 
 
 def make_row(columns, fill=' '):
-    return [fill for c in range(columns)]
+    return [fill for _ in range(columns)]
 
 def make_plane(rows, columns, fill=' '):
-    return [make_row(columns, fill) for r in range(rows)]
+    return [make_row(columns, fill) for _ in range(rows)]
 
 class TtyState(enum.Enum):
     NORMAL = 0,         # normal ASCII processing
