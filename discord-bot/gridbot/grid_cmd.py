@@ -97,18 +97,19 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
     async def jobs(self, ctx: Context):
         """View running jobs"""
         def _line(job: Job):
-            author = job.ctx.message.author
+            output_message = job.output_handler.output_message
+            author = output_message.author
 
-            # not everbody has a nickname, fall back to usename in that case
+            # not everybody has a nickname, fall back to username in that case
             name = author.nick if author.nick else author.name
 
-            # difference between current time vs start time, human readable
+            # calculate and format elapsed time
             cur_time = time.monotonic()
             sec = cur_time - job.start_time
             elapsed = hr.precise_delta(dt.timedelta(seconds=sec))
 
-            # do the thing
-            return f"* #{job.jid}, started by **{name}**, on `{job.target_node}`, running for **{elapsed}**, see {job.output_message.jump_url}"
+            # format this information
+            return f"* #{job.jid}, started by **{name}**, on `{job.target_node}`, running for **{elapsed}**, see {output_message.jump_url}"
 
         if job_table.has_jobs():
             table = '\n'.join(_line(j) for j in job_table)

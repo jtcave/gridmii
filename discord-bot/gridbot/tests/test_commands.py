@@ -71,9 +71,14 @@ class UserCommandTest(unittest.IsolatedAsyncioTestCase):
             await cog.jobs(cog, ctx)
             ctx.reply.assert_called_with("No jobs running")
 
-    @unittest.expectedFailure
     async def test_jobs_nonempty(self):
-        self.assertTrue(None, "TODO")
+        cog = self.cog()
+        ctx = mock_context()
+        table = JobTable()
+        table.new_job(mock_message(), "dummy-node", ctx=ctx)
+        with mock.patch("gridbot.grid_cmd.job_table", table):
+            await cog.jobs(cog, ctx)
+            ctx.reply.assert_called()
 
     @unittest.expectedFailure
     async def test_rules(self):
