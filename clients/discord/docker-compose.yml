@@ -1,5 +1,5 @@
 services:
-  server:
+  discord-bot:
     build: .
     volumes:
       - type: bind

@@ -1,0 +1,39 @@
+
+# Discord Bot Token
+token = ""
+
+# Discord Guild ID
+guild = ""
+
+# Optional - Discord Channel ID to restrict to
+# Default: None
+channel = ""
+
+# Array of Discord role IDs that are administrators
+# Default: None
+admin_roles = [ ]
+
+# Optional - Array of Discord user IDs that are banned from using the bot
+# Default: None
+banned_users = [ ]
+
+# UNIX Socket path of GridMii Host to connect to
+# Default: /run/gridmii-host.sock
+host_sock = "/run/gridmii-host.sock"
+
+# Optional - Minimum limit, in seconds, to ping a user when
+#            an ongoing job finishes (successful or not)
+# Default: 60
+notify_limit = 60
+
+# Optional - Minimum limit, in seconds, to report the time
+#            elapsed on an ongoing job, in the job status,
+#            when it finishes (successful or not)
+# Default: 1
+min_report_limit = 1
+
+# Optional - Path to OCI configuration file. If this is not
+#            set, services that use Oracle Cloud won't be
+#            available.
+# Default: None
+oci_config_file = "data/oci-config"
