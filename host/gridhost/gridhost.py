@@ -1,128 +1,44 @@
 import asyncio
 import json
-import time
-from typing import override
-
 import aiomqtt
 import logging
 
-from discord import Message
-from discord.ext.commands import errors, Context
-
-from .config import *
-from .entity import Job, Node, UserPrefs, job_table, node_table
-from .grid_cmd import UserCommandCog, AdminCommandCog, JobControlCog, AutoRollCallCog
-from .xfer import FileTransferCog
-from .neofetch import NeofetchCog
+from .config import Config
+from .entity import Job, Node, job_table, node_table
 from .cmd_denylist import permit_command
 from .get_version import GIT_VERSION
 
 
-DEFAULT_COGS = (UserCommandCog, AdminCommandCog, JobControlCog, AutoRollCallCog, FileTransferCog)
-
-## discord part ##
-
-bot_intents = discord.Intents.default()
-bot_intents.message_content = True
-
-class FlexBot(discord.ext.commands.Bot):
-    """Adapts d.e.c.Bot to fit our use case better."""
-
-    def __init__(self, *, command_prefix: str, script_prefix: str, intents: discord.Intents, **kwargs):
-        super().__init__(command_prefix, intents=intents, **kwargs)
-        self.script_prefix = script_prefix
-
-    async def on_command_error(self, context: Context, exception: errors.CommandError, /) -> None:
-        # Swallow exceptions that are due to user error and are not supposed to be serious issues
-        if isinstance(exception, errors.CheckFailure):
-            logging.debug("global command check failed")
-        else:
-            await super().on_command_error(context, exception)
-
-    @override
-    async def on_message(self, message: discord.Message, /):
-        if message.author.bot:
-            return
-        ctx = await self.get_context(message)
-        if ctx.valid:
-            await self.invoke(ctx)
-        elif message.content.startswith(self.script_prefix):
-            if await self.flex_check(ctx):
-                await self.flex_command(ctx)
-        elif message.type == discord.MessageType.reply:
-            await self.flex_reply(ctx)
-
-    async def flex_check(self, ctx: Context) -> bool:
-        return True
-
-    async def flex_command(self, ctx: Context, /):
-        """Run when a flex command is attempted"""
-        raise NotImplementedError("flex command not specified")
-
-    async def flex_reply(self, ctx: Context, /):
-        raise NotImplementedError("flex reply not specified")
-
-
-class GridMiiBot(FlexBot):
-    """Discord client that accepts GridMii commands and processes MQTT messages"""
-    def __init__(self, *, intents: discord.Intents):
-        super().__init__(command_prefix='!', script_prefix='$', intents=intents)
+class GridMiiHost():
+    """TCP server that accepts GridMii commands and processes MQTT messages"""
+    def __init__(self):
         self.mqtt_task = None
         self.after_broker_connect_task = None
         self.broker_connected = asyncio.Event()
-        self.target_channel: discord.TextChannel|None = None
         self.mq_client: aiomqtt.Client|None = None
         self.mq_sent = set()
         self.can_announce = False
 
     async def setup_hook(self) -> None:
-        logging.info(f"GridMii bot version {GIT_VERSION}")
+        logging.info(f"GridMii host version {GIT_VERSION}")
         # Install the MQTT task.
         self.mqtt_task = self.loop.create_task(self.do_mqtt_task())
         # Install the "after broker connection" task"
         self.after_broker_connect_task = self.loop.create_task(self.after_broker_connect())
 
-        # Install cogs
-        cogs = DEFAULT_COGS + (NeofetchCog,)
-        for cog_class in cogs:
-            await self.add_cog(cog_class(self))
-
-        # add check to help command
-        # (reuse the flex check so the help command works iff flex commands work)
-        self.help_command.add_check(self.flex_check)
-
-
     async def after_broker_connect(self):
         # Wait for the event to fire
         await self.broker_connected.wait()
-        # Wait for Discord for good measure
-        await self.wait_until_ready()
-        # Attempt to resolve the target channel name.
-        if Config.CHANNEL:
-            self.target_channel = self.get_channel(Config.CHANNEL)
-            if not self.target_channel:
-                logging.error(f"The target channel specified wasn't found. ID = {Config.CHANNEL}")
-            else:
-                # Do setup things that need the target channel
-                logging.debug(f"Using #{self.target_channel} as the target channel")
-                # After waiting some time, allow "node connected" messages to happen
-                async def _allow_announce():
-                    await asyncio.sleep(5)
-                    self.can_announce = True
-                self.loop.create_task(_allow_announce())
-        else:
-            logging.warning("No target channel has been specified. Certain status messages won't be sent.")
         await asyncio.sleep(5)
 
     async def do_mqtt_task(self):
         """Coroutine that sets up the MQTT client and processes inbound messages.
-        This is meant to be scheduled in the bot's event loop."""
+        This is meant to be scheduled in the host's event loop."""
         if Config.MQTT_TLS:
             tls_params = aiomqtt.TLSParameters()
         else:
             tls_params = None
 
-        await self.wait_until_ready()
         logging.info("Starting MQTT task") # helpmii
 
         self.mq_client = aiomqtt.Client(Config.BROKER, Config.PORT,
@@ -147,14 +63,9 @@ class GridMiiBot(FlexBot):
                 reconnect_delay = 3
                 logging.exception(f"Lost connection to broker. Retrying in {reconnect_delay} seconds")
                 await asyncio.sleep(reconnect_delay)
-            except discord.DiscordException:
-                # log discord exceptions
-                logging.exception("discord.py exception in MQTT task")
             except Exception as exc:
-                # complain in the target channel about exceptions we don't understand
                 logging.exception("Unhandled exception in MQTT task")
-                if self.target_channel:
-                    await self.target_channel.send(f":warning: wii messed up: {str(exc)}")
+                # TODO: Broadcast to clients
 
     async def ping_grid(self):
         await self.mq_client.publish("grid/ping", qos=2)
@@ -234,17 +145,18 @@ class GridMiiBot(FlexBot):
 
         logging.info(f"node present: {node_name} version {node_version}")
         node_table.node_seen(node_name, node_version)
-        if self.can_announce:
-            await self.target_channel.send(f":inbox_tray: Node `{node_name}` is connected")
+        # TODO: Broadcast to clients
 
     async def announce_node_gone(self, node_name: str):
         if self.can_announce:
-            await self.target_channel.send(f":outbox_tray: Node `{node_name}` has disconnected")
+            # TODO: Broadcast to clients
+            pass
 
     async def announce_string(self, payload: str):
         # don't respect self.can_announce
         # these kinds of announcements aren't directly caused by us starting up
-        await self.target_channel.send(f":mega: `{payload}`")
+        # TODO: Broadcast to clients
+        pass
 
     async def on_roll_call_reply(self, node_name: str, job_list: list[int]):
         # set of jobs that belong to the node
@@ -259,68 +171,30 @@ class GridMiiBot(FlexBot):
 
 
 
-    async def submit_job(self, ctx: Context, command_string: str, output_filter=None, callback=None):
+    async def submit_job(self, node: Node, command_string: str, output_filter=None, callback=None):
         if self.mq_client is None:
-            logging.error("GridMiiBot.mq_client is None!")
-            await ctx.send("**Internal error:** Couldn't submit a job because the MQTT client is not initialized")
+            logging.error("GridMiiHost.mq_client is None!")
+            # TODO: Broadcast to clients
             return
 
         # denylist
         if not permit_command(command_string):
             logging.warning(f"denied command: {command_string}")
-            await ctx.message.reply(":octagonal_sign: That command is not allowed")
+            # TODO: Broadcast to clients
             return
 
-        # pick a node
-        # try the user's locus
-        prefs = UserPrefs.get_prefs(ctx.author)
-        node = prefs.locus
-        if node is None or not node.is_present:
-            # locus isn't there, so use our pick logic
-            node = node_table.pick_node()
-            if node is None:
-                await ctx.message.reply(":x: No nodes are available at the moment.")
-                return
-
         # Post the reply that job output will go to
-        reply = await ctx.message.reply(f"Your job is starting on `{node.node_name}`...")
+        # TODO: Broadcast to clients that job is starting
 
         # Submit the job
         try:
-            job = await node.submit_job(command_string, reply, self.mq_client, output_filter, ctx, callback, prefs.tty)
-            bot.loop.create_task(job.clean_if_unstarted())
+            job = await node.submit_job(command_string, self.mq_client, output_filter, callback)
+            host.loop.create_task(job.clean_if_unstarted())
         except aiomqtt.exceptions.MqttError as ex_mq:
             logging.exception("error publishing job submission")
-            await reply.edit(content=f"**Couldn't submit job**: {str(ex_mq)}")
+            # TODO: Broadcast to clients that it failed
 
-    async def stdin_post(self, ctx: Context, job: Job):
-        body = ctx.message.content
-        body += '\n'
-        try:
-            payload = body.encode()
-        except UnicodeEncodeError:
-            # I can't see how this can even happen, but complain about it anyway
-            logging.exception("user message couldn't be encoded")
-            await ctx.reply(":x: Internal error encoding your stdin")
-            return
+    async def stdin_post(self, payload: bytes, job: Job):
         await job.stdin(payload, self.mq_client)
 
-    async def flex_check(self, ctx: Context) -> bool:
-        """Check for appropriate channel and user"""
-        # If a channel was specified in the config, only allow commands in that channel.
-        channel_ok =  ctx.channel.id == Config.CHANNEL or Config.CHANNEL is None
-        # Don't let banned users use the cog
-        return channel_ok and ctx.author.id not in Config.BANNED_USERS
-
-    async def flex_command(self, ctx: Context, /):
-        # chop off the command prefix
-        command_string = ctx.message.content[1:]
-        await self.submit_job(ctx, command_string)
-
-    async def flex_reply(self, ctx: Context, /):
-        # XXX: this method should probably be in that cog itself
-        job = JobControlCog.job_for_reply(ctx)
-        if job is not None:
-            await self.stdin_post(ctx, job)
-
-bot = GridMiiBot(intents=bot_intents)
+host = GridMiiHost()
