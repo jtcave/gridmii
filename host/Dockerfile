@@ -6,7 +6,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # oci is a soft dependency so install it separately
 RUN pip install --no-cache-dir oci
 
-COPY gridsrv ./gridsrv
+COPY gridhost ./gridhost
 RUN mkdir data
 
-CMD ["python", "-m", "gridsrv"]
+CMD ["python", "-m", "gridhost"]

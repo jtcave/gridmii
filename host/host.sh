@@ -1,4 +1,4 @@
 #!/bin/sh
 . bin/activate
-python -m gridsrv
+python -m gridhost
 
