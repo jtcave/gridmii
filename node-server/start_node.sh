@@ -19,7 +19,7 @@ then
     exit 1
 else
     echo "Loading config file: $CONFIG_FILE"
-    . ./$CONFIG_FILE
+    . "./$CONFIG_FILE"
 
     # config validation follows
     
