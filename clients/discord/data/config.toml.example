@@ -17,27 +17,9 @@ admin_roles = [ ]
 # Default: None
 banned_users = [ ]
 
-# MQTT Broker domain
-mqtt_broker = "foo.example.com"
-
-# MQTT Broker port
-mqtt_port = 1234
-
-# Optional - Should broker use TLS?
-# Default: False
-mqtt_tls = false
-
-# Optional - MQTT Username
-# Default: ""
-mqtt_username = "epic_user"
-
-# Optional - MQTT Password
-# Default: ""
-mqtt_password = "alpine"
-
-# Optional - MQTT Keepalive
-# Default: 60
-mqtt_keepalive = 90
+# UNIX Socket path of GridMii Host to connect to
+# Default: /run/gridmii-host.sock
+host_sock = "/run/gridmii-host.sock"
 
 # Optional - Minimum limit, in seconds, to ping a user when
 #            an ongoing job finishes (successful or not)

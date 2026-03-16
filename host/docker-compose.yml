@@ -1,0 +1,7 @@
+services:
+  server:
+    build: .
+    volumes:
+      - type: bind
+        source: ./data
+        target: /gridmii/data

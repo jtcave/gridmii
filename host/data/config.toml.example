@@ -1,0 +1,31 @@
+# MQTT Broker domain
+mqtt_broker = "foo.example.com"
+
+# MQTT Broker port
+mqtt_port = 1234
+
+# Optional - Should broker use TLS?
+# Default: False
+mqtt_tls = false
+
+# Optional - MQTT Username
+# Default: ""
+mqtt_username = "epic_user"
+
+# Optional - MQTT Password
+# Default: ""
+mqtt_password = "alpine"
+
+# Optional - MQTT Keepalive
+# Default: 60
+mqtt_keepalive = 90
+
+# UNIX Socket path to listen on for connections from GridMii Clients
+# Default: /run/gridmii-host.sock
+host_sock = "/run/gridmii-host.sock"
+
+# Optional - Path to OCI configuration file. If this is not
+#            set, services that use Oracle Cloud won't be
+#            available.
+# Default: None
+oci_config_file = "data/oci-config"
