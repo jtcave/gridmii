@@ -20,6 +20,9 @@ then
 else
     echo "Loading config file: $CONFIG_FILE"
     . ./$CONFIG_FILE
+
+    # config validation follows
+    
     # demand a cert only if TLS is set 
     if [ ! -r "$CERT_FILE" ] && [ -n "$GRID_TLS" ]
     then
@@ -33,18 +36,18 @@ else
         echo 'Try running `make` or `gmake`.'
         exit 1
     fi
+
+    # prevent TMPDIR from being an empty string
     if [ "$TMPDIR" = "" ]
     then
-        echo '$TMPDIR appears to be blank. Falling back to /tmp'
-	    # ensure that it's really unset
-	    unset TMPDIR
+        unset TMPDIR
     fi
 
     # if it's an empty but set string, that's fatal to the server - complain
     if [ "$GRID_NODE_NAME" = "" ]
     then
         echo 'GRID_NODE_NAME is empty. Please set GRID_NODE_NAME to the name of your node.'
-	    exit 1
+        exit 1
     fi
 
     exec $NODE_BIN
