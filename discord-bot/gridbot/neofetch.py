@@ -56,6 +56,9 @@ def fastfetch_filter(s: str) -> str:
     # combine horizontally
     if not info:
         return logo
+    elif not logo:
+        # we got nothing
+        return "fastfetch had no output (is fastfetch installed on the node?)"
     else:
         logo_lines = logo.splitlines()
         info_lines = info.splitlines()
