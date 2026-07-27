@@ -6,15 +6,15 @@ from .output_filter import BACKTICKS_ZWS
 from .grid_cmd import GridMiiCogBase
 
 FETCH_SCRIPT = """
-if ! command -v fastfetch &> /dev/null; then
+if command -v fastfetch &> /dev/null; then
+    fastfetch --pipe false -s none
+    echo '===snip==='
+    fastfetch --pipe false -l none -s 'Title:Separator:OS:Host:Kernel:Uptime:Packages:CPU:Memory:Swap:Disk:LocalIp:Locale:Break'
+else
     echo "fastfetch is not installed"
     echo "===snip==="
     echo "on this node"
     exit 1
-else
-    fastfetch --pipe false -s none
-    echo '===snip==='
-    fastfetch --pipe false -l none -s 'Title:Separator:OS:Host:Kernel:Uptime:Packages:CPU:Memory:Swap:Disk:LocalIp:Locale:Break'
 fi
 """
 assert len(FETCH_SCRIPT) < 2000     # discord message size
