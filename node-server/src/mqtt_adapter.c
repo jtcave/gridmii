@@ -305,14 +305,18 @@ void gm_disconnect() {
     if (rv != MQTT_OK) {
         warnx("could not disconnect from broker: %s", mqtt_error_str(rv));
     }
+    else {
+        puts("Disconnected.");
+    }
 
     // Manually close the socket to make sure the disconnect message made it out before we leave
     BIO_free_all(gm_mqtt_params.broker_bio);
     gm_mqtt_params.broker_bio = NULL;
 }
 
-// Disconnect from the broker, free resources, and exit
+// Disconnect from the broker immediately without calling into the MQTT library.
+// (This avoids deadlocking in a signal handler.)
 void gm_shutdown() {
-    gm_disconnect();
+    BIO_free_all(gm_mqtt_params.broker_bio);
     exit(0);
 }
