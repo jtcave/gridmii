@@ -7,106 +7,35 @@
 #include <sys/utsname.h>
 #include <poll.h>
 #include <unistd.h>
+#include <netdb.h>
+#include <fcntl.h>
 
 #include <stdio.h>
 
-#include <mosquitto.h>
-
 #include "gm-node.h"
 
-// global mosquitto object
-struct mosquitto *gm_mosq = NULL;
+// global mqtt object
+struct mqtt_client *gm_mqtt = NULL;
+static struct mqtt_client client_instance;
+
+// params for the object
+static struct gm_mqtt_params gm_mqtt_params;
 
 void subscribe_topics(void);
-
-bool is_mqtt_initialized(void);
-void assert_mqtt_initialized(void);
 void attempt_reconnect(void);
+int connect_to_broker(void);
 
-// mosquitto callbacks that we set
-void has_connected(struct mosquitto *mosq, void *obj, int rc);
-void has_published(struct mosquitto *mosq, void *obj, int mid);
-void has_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *message);
-void has_subscribed(struct mosquitto *mosq, void *obj, int mid, int qos_count, const int *granted_qos);
-void has_disconnected(struct mosquitto *mosq, void *obj, int reason);
+// callbacks that we set
+void has_message(void **state, struct mqtt_response_publish *message);
+void has_disconnected(struct mqtt_client *client, void **state);
 
-// returhs false if MQTT hasn't been initialized - that is, if `gm_mosq` is still NULL;
-bool is_mqtt_initialized() {
-    return gm_mosq != NULL;
-}
-
-// sanity check for initialized MQTT
-void assert_mqtt_initialized(void) {
-    if (!is_mqtt_initialized()) {
-        errx(1, "internal error - MQTT not initialized");
-    }
-}
-
-struct mosquitto *gm_init_mqtt(void) {
-    int rv;
-
-    // get the MQTT client ID
-    const char *client_name = gm_config.node_name;
-
-    // set up library
-    if (mosquitto_lib_init() != MOSQ_ERR_SUCCESS) {
-        errx(1, "could not initialize mosquitto library");
-    }
-    // set up mosquitto struct
-    // We want to clear messages and subscriptions on disconnect, because we
-    // don't want a torrent of jobs coming in from users who submitted them
-    // without knowing the node was down. We also want to start with a clean
-    // slate with subscriptions. Hence, set clean_session.
-    gm_mosq = mosquitto_new(client_name, true, NULL);
-    if (gm_mosq == NULL) {
-        err(1, "could not create mosquitto client object");
-    }
-
-    // wire up callbacks
-    mosquitto_connect_callback_set(gm_mosq, has_connected);
-    mosquitto_publish_callback_set(gm_mosq, has_published);
-    mosquitto_subscribe_callback_set(gm_mosq, has_subscribed);
-    mosquitto_message_callback_set(gm_mosq, has_message);
-    mosquitto_disconnect_callback_set(gm_mosq, has_disconnected);
-
+void gm_init_mqtt(void) {
+    // set up client struct
+    gm_mqtt = &client_instance;
+    mqtt_init_reconnect(gm_mqtt, &has_disconnected, NULL, &has_message);
     
-    // declare last will of client
-    rv = mosquitto_will_set(gm_mosq, "node/disconnect", strlen(client_name), client_name, 1, false);
-    if (rv != MOSQ_ERR_SUCCESS) {
-        errx(1, "could not set last will, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
-    }
-
-    // TODO: let user specify TLS cert name
-    if (gm_config.use_tls) {
-        rv = mosquitto_tls_set(gm_mosq, "gridmii.crt", NULL, NULL, NULL, NULL);
-        if (rv != MOSQ_ERR_SUCCESS) {
-            errx(1, "could not set up TLS, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
-        }
-    }
-
-    if (gm_config.grid_username != NULL && gm_config.grid_password != NULL) {
-        mosquitto_username_pw_set(gm_mosq, gm_config.grid_username, gm_config.grid_password);
-    }
-
-    return gm_mosq;
-}
-
-void gm_connect_mqtt() {
-    assert_mqtt_initialized();
-
-    // connect
-    const char *host = gm_config.grid_host;
-    int port = gm_config.grid_port;
-    printf("Connecting to broker %s:%d\n", host, port);
-    int rv = mosquitto_connect(gm_mosq, host, port, GRID_KEEPALIVE);
-    if (rv == MOSQ_ERR_ERRNO) {
-        err(1, "could not connect to broker");
-    }
-    else if (rv != MOSQ_ERR_SUCCESS) {
-        errx(1, "could not connect to broker, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
-    }
-
-    subscribe_topics();
+    // clear the socket
+    gm_mqtt_params.socket_fd = 0;
 }
 
 // Subscribe to all topics relevant to a node.
@@ -115,142 +44,233 @@ void subscribe_topics() {
     char topic_buf[512];
 
     // subscribe to node topics
-    int rv;
+    enum MQTTErrors rv;
     snprintf(topic_buf, sizeof(topic_buf), "%s/#", gm_config.node_name);
-    rv = mosquitto_subscribe(gm_mosq, NULL, topic_buf, 2);
-    if (rv != MOSQ_ERR_SUCCESS) {
-        errx(1, "could not subscribe to node topics, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
+    rv = mqtt_subscribe(gm_mqtt, topic_buf, 2);
+    if (rv != MQTT_OK) {
+        errx(1, "could not subscribe to node topics: %s", mqtt_error_str(rv));
     }
 
     // subscribe to grid topics
-    rv = mosquitto_subscribe(gm_mosq, NULL, "grid/#", 2);
-    if (rv != MOSQ_ERR_SUCCESS) {
-        errx(1, "could not subscribe to grid topics, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
+    rv = mqtt_subscribe(gm_mqtt, "grid/#", 2);
+    if (rv != MQTT_OK) {
+        errx(1, "could not subscribe to grid topics: %s", mqtt_error_str(rv));
     }
 }
 
 // Process MQTT events. This is to be called by the main event loop after polling the socket.
 void gm_process_mqtt(short revents) {
     // process events for mqtt socket
-    int rv;
+    enum MQTTErrors rv;
 
     if (revents & (POLLERR | POLLHUP | POLLNVAL)) {
         // socket broke, put it back
         warnx("mqtt socket died, revents = 0x%hx", revents);
         attempt_reconnect();
     }
-    if (revents & POLLIN) {
-        rv = mosquitto_loop_read(gm_mosq, 1);
-        if (rv != MOSQ_ERR_SUCCESS) {
-            warnx("read ops failed, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
-        }
+    
+    rv = mqtt_sync(gm_mqtt);
+    if (rv != MQTT_OK) {
+        warnx("mqtt sync failed: %s", mqtt_error_str(rv));
     }
-    if (revents & POLLOUT) {
-        rv = mosquitto_loop_write(gm_mosq, 1);
-        if (rv != MOSQ_ERR_SUCCESS) {
-            warnx("write ops failed, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
-        }
+}
+
+// Deferred message queue
+
+struct deferred_message *dmq_head = NULL;
+struct deferred_message *dmq_tail = NULL;
+
+// Save the body of this message into the DMQ
+void defer_message(struct mqtt_response_publish *message) {
+    int topic_len, payload_len;
+    struct deferred_message *node;
+
+    // copy topic
+    node = malloc(sizeof(struct deferred_message));
+    topic_len = message->topic_name_size;
+    if (topic_len > MQTT_ID_MAX_LENGTH) {
+        topic_len = MQTT_ID_MAX_LENGTH;
+    }
+    memset(node->topic, 0, MQTT_ID_MAX_LENGTH + 1);
+    memcpy(node->topic, message->topic_name, topic_len);
+
+    // copy payload
+    payload_len = node->payload_len = message->application_message_size;
+    if (payload_len > 0 && message->application_message != NULL) {
+        node->payload = malloc(payload_len);
+        memcpy(node->payload, message->application_message, payload_len);
+    }
+    else {
+        node->payload = NULL;
     }
 
-    rv = mosquitto_loop_misc(gm_mosq);
-    if (rv != MOSQ_ERR_SUCCESS) {
-        warnx("misc ops failed, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
+    // enqueue node
+    if (dmq_head == NULL || dmq_tail == NULL) {
+        dmq_head = dmq_tail = node;
     }
+    else {
+        dmq_tail->next = node;
+        dmq_tail = node;
+    }
+    node->next = NULL;
+}
+
+// Deallocate a DMQ entry
+void free_deferred_message(struct deferred_message *node) {
+    if (node->payload != NULL) {
+        free(node->payload);
+    }
+    free(node);
+}
+
+// Process each DMQ entry. Free them afterwards.
+void service_dmq(void) {
+    while (dmq_head != NULL) {
+        struct deferred_message *here = dmq_head;
+        gm_route_message(here);
+        dmq_head = here->next;
+        free_deferred_message(here);
+    }
+    dmq_tail = NULL;
 }
 
 // callbacks
 
-void has_connected(struct mosquitto *mosq, void *obj, int rc) {
-    if (rc != MOSQ_ERR_SUCCESS) {
-        printf("has_connected(%p, %p, %d)\n", mosq, obj, rc);
+// Called when we get an MQTT message
+void has_message(void **state, struct mqtt_response_publish *message) {
+    int i;
+    char *topic = (char*)(message->topic_name);
+    // print our message for debugging
+    printf("message %d @ ", (int)(message->packet_id));
+    for (i = 0; i < message->topic_name_size; i++) {
+        putchar(topic[i]);
     }
-    else {
-        puts("Connected to MQTT");
-        gm_announce();
-    }
+    putchar('\n');
+    // save message for later
+    defer_message(message);
 }
 
-void has_published(struct mosquitto *mosq, void *obj, int mid) {
-    // printf("has_published(%p, %p, %d)\n", mosq, obj, mid);
-}
-
-void has_subscribed(struct mosquitto *mosq, void *obj, int mid, int qos_count, const int *granted_qos) {
-    //printf("has_subscribed(%p, %p, %d, %d, %p)\n", mosq, obj, mid, qos_count, granted_qos);
-    printf("Subscribed, mid = %d\n", mid);
-}
-
-void has_message(struct mosquitto *mosq, void *obj, const struct mosquitto_message *message) {
-    // punt to controller
-    gm_route_message(message);
-}
-
-void has_disconnected(struct mosquitto *mosq, void *obj, int reason) {
-    printf("in reconnect callback, reason = %d\n", reason);
-    if (reason != 0) {
-        attempt_reconnect();
-    }
-    
+// Called when we we need to (re)connect to the broker
+void has_disconnected(struct mqtt_client *client, void **state) {
+    attempt_reconnect();
 }
 
 // Reconnect to MQTT with exponential backoff
 #define MIN_DELAY 1
 #define MAX_DELAY 60
 
-// Try to reconnect
+// Try to (re)connect
 void attempt_reconnect(void) {
-    int delay = MIN_DELAY;
-    int rv;
-    puts("Reconnecting to broker...");
-    while ((rv = mosquitto_reconnect(gm_mosq) != MOSQ_ERR_SUCCESS)) {
-        if (rv == MOSQ_ERR_ERRNO || rv == MOSQ_ERR_NOMEM) {
-            if (rv == MOSQ_ERR_ERRNO){
-                warn("could not reconnect");
-            }
-            else {
-                warnx("could not reconnect, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
-            }
-            printf("sleeping for %d secs and trying again\n", delay);
-            sleep(delay);
-            delay *= 2;
-            delay = delay > MAX_DELAY ? MAX_DELAY : delay;
-        }
-        else {
-            errx(1, "could not reconnect, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
-        }
-    }
+    enum MQTTErrors rv;
+    uint8_t flags;
 
-    subscribe_topics();
-}
-
-// pump one cycle of the mosquitto message loop
-void do_mqtt_events() {
-    int fd = mosquitto_socket(gm_mosq);
-    if (fd == -1) {
-        err(1, "could not get socket from mosquitto object");
-    }
-
-    struct pollfd pfd;
-    pfd.fd = fd;
-    pfd.events = POLLIN;
-
-    // only poll for write if there's something that needs written
-    if (mosquitto_want_write(gm_mosq)) {
-        pfd.events = POLLIN | POLLOUT;
+    const char *client_id = gm_config.node_name;
+    
+    // check error from client object
+    if (gm_mqtt->error == MQTT_ERROR_INITIAL_RECONNECT) {
+        puts("Connecting to broker...");
     }
     else {
-        pfd.events = POLLIN;
+        printf("Reconnecting to broker (%s)...\n", mqtt_error_str(gm_mqtt->error));
     }
-    int rv = poll(&pfd, 1, DELAY_MS);
+
+    // don't leak old sockets
+    if (gm_mqtt_params.socket_fd > 0) {
+        close(gm_mqtt_params.socket_fd);
+    }
+    gm_mqtt_params.socket_fd = 0;
+
+    // build socket
+    gm_mqtt_params.socket_fd = connect_to_broker();
+
+    // mqtt_reinit
+    mqtt_reinit(gm_mqtt, gm_mqtt_params.socket_fd,
+        gm_mqtt_params.xmit_buffer, GM_MQTT_XMIT_BUFFER_SIZE,
+        gm_mqtt_params.recv_buffer, GM_MQTT_RECV_BUFFER_SIZE);
+
+    flags = MQTT_CONNECT_CLEAN_SESSION | MQTT_CONNECT_WILL_QOS_2;
+
+    // mqtt_connect (LWT message set here)
+    rv = mqtt_connect(gm_mqtt, client_id,
+        "node/disconnect", client_id, strlen(client_id),    // last will
+        gm_config.grid_username, gm_config.grid_password,
+        flags, GRID_KEEPALIVE);
+    if (rv != MQTT_OK) {
+        errx(1, "could not establish MQTT session: %s", mqtt_error_str(rv));
+    }
+
+    // subscribe to topics
+    subscribe_topics();
+
+    gm_announce();
+
+    puts("Connected.");
+}
+
+// establish a TCP connection to the broker, returning the socket
+// TODO: auto-retry
+int connect_to_broker(void) {
+    // int delay = MIN_DELAY;
+    int rv;
+    int fd = -1;
+    struct addrinfo hint;
+    struct addrinfo *ai;
+    char portbuf[8];
+
+    // address lookup
+    memset(&hint, 0, sizeof hint);
+    hint.ai_family = AF_INET; // TODO: change this to AF_UNSPEC
+    hint.ai_socktype = SOCK_STREAM;
+    snprintf(portbuf, 8, "%d", gm_config.grid_port);
+    rv = getaddrinfo(gm_config.grid_host, portbuf, &hint, &ai);
+    if (rv != 0 || ai == NULL) {
+        errx(1, "could not look up address for GRID_HOST: %s", gai_strerror(rv));
+    }
+
+    fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+    if (fd == -1) {
+        err(1, "could not create socket");
+    }
+
+    rv = connect(fd, ai->ai_addr, ai->ai_addrlen);
     if (rv == -1) {
-        if (errno == EINTR || errno == EAGAIN) {
-            // just try again later
-            return;
-        }
-        else {
-            err(1, "could not poll()");
-        }
+        err(1, "could not connect to broker");
     }
-    gm_process_mqtt(pfd.revents);
+
+    rv = fcntl(fd, F_SETFL, O_NONBLOCK);
+    if (rv == -1) {
+        err(1, "fcntl(fd, F_SETFL, O_NONBLOCK)");
+    }
+
+    return fd;
+}
+
+// pump one cycle of the mqtt message loop
+void do_mqtt_events() {
+    struct pollfd pfd;
+    int rv;
+
+    if (gm_mqtt_params.socket_fd > 0) {
+        pfd.fd = gm_mqtt_params.socket_fd;
+        pfd.events = POLLIN | POLLOUT;
+        rv = poll(&pfd, 1, DELAY_MS);
+        if (rv == -1) {
+            if (errno == EINTR || errno == EAGAIN) {
+                // just try again later
+                return;
+            }
+            else {
+                err(1, "could not poll()");
+            }
+        }
+        gm_process_mqtt(pfd.revents);
+    }
+    else {
+        gm_process_mqtt(0);
+    }
+
+    // Handle messages that the callbacks saved for later
+    service_dmq();
 }
 
 // Announce the node's existence to the grid
@@ -267,24 +287,39 @@ void gm_announce(void) {
     json_object_set_new(message, "node", message_node);
     json_object_set_new(message, "version", message_version);
 
-    int rv = gm_publish_json(message, "node/connect", 1, false);
-    if (rv != MOSQ_ERR_SUCCESS) {
-        errx(1, "could not announce, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
+    enum MQTTErrors rv = gm_publish_json(message, "node/connect", 1, false);
+    if (rv != MQTT_OK) {
+        errx(1, "could not announce: %s", mqtt_error_str(rv));
+    }
+}
+
+// Convert a QoS level into an MQTT-C flags field
+uint8_t flags_for_qos(int qos) {
+    switch (qos) {
+        case 0: return MQTT_PUBLISH_QOS_0;
+        case 1: return MQTT_PUBLISH_QOS_1;
+        case 2: return MQTT_PUBLISH_QOS_2;
+        default: return MQTT_PUBLISH_QOS_2;
     }
 }
 
 // Serialize a JSON object and publish it as the payload of a given topic
 // Takes ownership of the object and decrefs it.
-int gm_publish_json(json_t *js, const char *topic, int qos, bool retain) {
-    char *ser = json_dumps(js, JSON_COMPACT);
-    int rv;
+enum MQTTErrors gm_publish_json(json_t *js, const char *topic, int qos, bool retain) {
+    char *ser;
+    enum MQTTErrors rv;
+    uint8_t flags = flags_for_qos(qos);
+    if (retain) {
+        flags |= MQTT_PUBLISH_RETAIN;
+    }
+    ser = json_dumps(js, JSON_COMPACT);
     if (ser) {
-        rv = mosquitto_publish(gm_mosq, NULL, topic, strlen(ser), ser, qos, retain);
+        rv = mqtt_publish(gm_mqtt, topic, ser, strlen(ser), flags);
         free(ser);
     }
     else {
         // can't do anything about an error, just publish a message and hope for the best
-        rv = mosquitto_publish(gm_mosq, NULL, topic, 0, "", qos, retain);
+        rv = mqtt_publish(gm_mqtt, topic, "", 0, flags);
     }
     json_decref(js);
     return rv;
@@ -294,19 +329,16 @@ int gm_publish_json(json_t *js, const char *topic, int qos, bool retain) {
 // Disconnect from the broker and free resources
 void gm_disconnect() {
     // Send disconect message 
-    int rv = mosquitto_publish(gm_mosq, NULL, "node/disconnect", strlen(gm_config.node_name), gm_config.node_name, 1, false);
-    if (rv != MOSQ_ERR_SUCCESS) {
-        // we're shutting down anyway, may as well warn instead of err
-        warnx("could not send farewell, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
-    }
-    rv = mosquitto_disconnect(gm_mosq);
-    if (rv != MOSQ_ERR_SUCCESS) {
-        warnx("could not disconnect from broker, mosq_err_t = %d (%s)", rv, mosquitto_strerror(rv));
-    }
 
-    mosquitto_destroy(gm_mosq);
-    gm_mosq = NULL;
-    mosquitto_lib_cleanup();
+    enum MQTTErrors rv = mqtt_publish(gm_mqtt, "node/disconnect", gm_config.node_name, strlen(gm_config.node_name), MQTT_PUBLISH_QOS_1);
+    if (rv != MQTT_OK) {
+        // we're shutting down anyway, may as well warn instead of err
+        warnx("could not send farewell: %s", mqtt_error_str(rv));
+    }
+    rv = mqtt_disconnect(gm_mqtt);
+    if (rv != MQTT_OK) {
+        warnx("could not disconnect from broker: %s", mqtt_error_str(rv));
+    }
 }
 
 // Disconnect from the broker, free resources, and exit

@@ -14,7 +14,7 @@ void on_stdout_mqtt(struct job *jobspec, int source_fd, char *buffer, size_t rea
         snprintf(topic_buf, sizeof(topic_buf), "job/%d/%s", jobspec->job_id, topic_leaf);
 
         // publish to the topic with the buffer contents as payload
-        mosquitto_publish(gm_mosq, NULL, topic_buf, readsize, buffer, 2, false);
+        mqtt_publish(gm_mqtt, topic_buf, buffer, readsize, MQTT_PUBLISH_QOS_2);
 
         // update write count and check write quota
         jobspec->stdout_sent += readsize;
@@ -33,13 +33,13 @@ void on_stdout_mqtt(struct job *jobspec, int source_fd, char *buffer, size_t rea
 void gm_publish_job_status(int jid, const char *verb, const char *payload) {
     char topic_buf[512];
     snprintf(topic_buf, sizeof(topic_buf), "job/%d/%s", jid, verb);
-    mosquitto_publish(gm_mosq, NULL, topic_buf, strlen(payload), payload, 2, false);
+    mqtt_publish(gm_mqtt, topic_buf, payload, strlen(payload), MQTT_PUBLISH_QOS_2);
 }
 
 void gm_publish_node_announce(const char *text) {
     char payload[512];
     snprintf(payload, sizeof(payload), "%s: %s", gm_config.node_name, text);
-    mosquitto_publish(gm_mosq, NULL, "node/announce", strlen(payload), payload, 2, false);
+    mqtt_publish(gm_mqtt, "node/announce", payload, strlen(payload), MQTT_PUBLISH_QOS_2);
     fprintf(stderr, "announcement: %s\n", payload);
 }
 
@@ -144,12 +144,12 @@ void unpack_ttyspec(struct ttyspec *ttyspec, json_t *obj) {
     }
 }
 */
-void on_submit_job(const struct mosquitto_message *message, jid_t jid) {
+void on_submit_job(struct deferred_message *message, jid_t jid) {
     // attempt to decode
     char script[JOB_SCRIPT_LIMIT+1] = {0};
     struct ttyspec ttyspec;
     json_error_t j_err;
-    json_t *payload = json_loadb(message->payload, message->payloadlen, 0, &j_err);
+    json_t *payload = json_loadb(message->payload, message->payload_len, 0, &j_err);
     if (payload != NULL) {
         // fish out the script
         json_t *payload_script = json_object_get(payload, "script");
@@ -172,9 +172,9 @@ void on_submit_job(const struct mosquitto_message *message, jid_t jid) {
         // decoding failure means it's probably a legacy job script
         // (don't remove this, it's convenient for testing)
         memset(script, 0, JOB_SCRIPT_LIMIT+1);
-        int payload_size = (message->payloadlen >= JOB_SCRIPT_LIMIT)
+        int payload_size = (message->payload_len >= JOB_SCRIPT_LIMIT)
                                 ? JOB_SCRIPT_LIMIT - 1
-                                : message->payloadlen;
+                                : message->payload_len;
         memcpy(script, message->payload, payload_size);
     }
 
@@ -194,26 +194,24 @@ void on_submit_job(const struct mosquitto_message *message, jid_t jid) {
     }
 }
 
-void gm_route_message(const struct mosquitto_message *message) {
-    // log the mid and topic
-    printf("message %d @ %s\n", message->mid, message->topic);
-
+void gm_route_message(struct deferred_message *message) {
     // set up patterns
     init_topic_templates();
 
     // start matching topic patterns
     jid_t jid = 0;
     int signum = 0;
+    char *topic = message->topic;
 
     // submit job endpoint
 
-    if (sscanf(message->topic, topic_patterns[TOPIC_SUBMIT_JOB], &jid) > 0) {
+    if (sscanf(topic, topic_patterns[TOPIC_SUBMIT_JOB], &jid) > 0) {
         on_submit_job(message, jid);
     }
 
     // stdin endpoint
-    else if (sscanf(message->topic, topic_patterns[TOPIC_STDIN_JOB], &jid) > 0) {
-        int rv = job_stdin_write(jid, message->payload, message->payloadlen);
+    else if (sscanf(topic, topic_patterns[TOPIC_STDIN_JOB], &jid) > 0) {
+        int rv = job_stdin_write(jid, message->payload, message->payload_len);
         // TODO: report stdin write error on a more appropriate channel
         if (rv != 0) {
             char err_buf[128];
@@ -223,7 +221,7 @@ void gm_route_message(const struct mosquitto_message *message) {
     }
 
     // stdin EOF endpoint
-    else if (sscanf(message->topic, topic_patterns[TOPIC_EOF_JOB], &jid) > 0) {
+    else if (sscanf(topic, topic_patterns[TOPIC_EOF_JOB], &jid) > 0) {
         int rv = job_stdin_eof(jid);
         // TODO: report stdin errors on a more appropriate channel
         if (rv != 0) {
@@ -234,7 +232,7 @@ void gm_route_message(const struct mosquitto_message *message) {
     }
 
     // signal endpoint
-    else if (sscanf(message->topic, topic_patterns[TOPIC_SIGNAL_JOB], &jid, &signum) > 0) {
+    else if (sscanf(topic, topic_patterns[TOPIC_SIGNAL_JOB], &jid, &signum) > 0) {
         int rv = job_signal(jid, signum);
         // TODO: report job manip errors on a more appropriate channel
         if (rv != 0) {
@@ -245,38 +243,38 @@ void gm_route_message(const struct mosquitto_message *message) {
     }
 
     // scram endpoint
-    else if (strcmp(message->topic, topic_patterns[TOPIC_SCRAM]) == 0) {
+    else if (strcmp(topic, topic_patterns[TOPIC_SCRAM]) == 0) {
         job_scram();
     }
 
     // reload endpoint
-    else if (strcmp(message->topic, topic_patterns[TOPIC_RELOAD]) == 0) {
+    else if (strcmp(topic, topic_patterns[TOPIC_RELOAD]) == 0) {
         gm_reload();
     }
 
     // exit endpoint
-    else if (strcmp(message->topic, topic_patterns[TOPIC_EXIT]) == 0) {
+    else if (strcmp(topic, topic_patterns[TOPIC_EXIT]) == 0) {
         gm_shutdown();
     }
 
     // Next come the broadcast topics
     // broadcast ping
-    else if (strcmp(message->topic, "grid/ping") == 0) {
+    else if (strcmp(topic, "grid/ping") == 0) {
         gm_announce();
     }
 
     // broadcast scram
-    else if (strcmp(message->topic, "grid/scram") == 0) {
+    else if (strcmp(topic, "grid/scram") == 0) {
         job_scram();
     }
 
     // broadcast roll_call
-    else if (strcmp(message->topic, "grid/roll_call") == 0) {
+    else if (strcmp(topic, "grid/roll_call") == 0) {
         job_roll_call();
     }
     
     // unrecognized topic, complain
     else {
-        fprintf(stderr, "don't understand topic '%s'\n", message->topic);
+        fprintf(stderr, "don't understand topic '%s'\n", topic);
     }
 }

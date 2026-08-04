@@ -563,9 +563,9 @@ void job_roll_call() {
     }
     
     // publish message
-    int rv = gm_publish_json(root, "node/roll_call", 2, false);
-    if (rv != 0) { // TODO: better return value from gm_publish_json
-        warnx("could not publish roll call (error %d)", rv);
+    enum MQTTErrors rv = gm_publish_json(root, "node/roll_call", 2, false);
+    if (rv != MQTT_OK) {
+        warnx("could not publish roll call: %s", mqtt_error_str(rv));
     }
 }
 

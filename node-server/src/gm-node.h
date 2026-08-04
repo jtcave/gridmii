@@ -15,9 +15,10 @@
 #endif
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <sys/types.h>
-#include <mosquitto.h>
 #include <jansson.h>
+#include "mqtt.h"
 
 /// declarations - misc system ///
 
@@ -45,19 +46,39 @@ extern bool gm_in_child;
 
 /// declarations - mqtt ///
 
-// global mosquitto object
-extern struct mosquitto *gm_mosq;
+// defined here for memory allocation purposes
+// (strangely, this doesn't seem to be in mqtt-c)
+#define MQTT_ID_MAX_LENGTH 23
 
-// Initialize and configure a mosquitto object
-// Store that object in global variable `gm_mosq`, and also return it
-struct mosquitto *gm_init_mqtt(void);
+// global mqtt object
+extern struct mqtt_client *gm_mqtt;
 
-// Connect to the broker and subscribe to topics
-void gm_connect_mqtt(void);
+// data and buffers we need for MQTT
+#define GM_MQTT_XMIT_BUFFER_SIZE 65535
+#define GM_MQTT_RECV_BUFFER_SIZE 65535
+struct gm_mqtt_params {
+    int socket_fd;
+    uint8_t xmit_buffer[GM_MQTT_XMIT_BUFFER_SIZE];
+    uint8_t recv_buffer[GM_MQTT_RECV_BUFFER_SIZE];
+};
+
+// Deferred message queue
+// We have to store message contents for later because MQTT-C does not
+// allow users to call mqtt_publish from a callback context.
+struct deferred_message {
+    char topic[MQTT_ID_MAX_LENGTH + 1];
+    char *payload;
+    size_t payload_len;
+    struct deferred_message *next;
+};
+
+// Connect to the broker and initialize MQTT
+// Store the broker object in global variable `gm_mqtt`
+void gm_init_mqtt(void);
 
 // Serialize a JSON object and publish it as the payload of a given topic
 // Takes ownership of the object and decrefs it.
-int gm_publish_json(json_t *js, const char *topic, int qos, bool retain);
+enum MQTTErrors gm_publish_json(json_t *js, const char *topic, int qos, bool retain);
 
 // Announce the node's existence to the grid
 void gm_announce(void);
@@ -151,7 +172,7 @@ void job_roll_call(void);
 /// declarations - message response controller
 
 // incoming message router
-void gm_route_message(const struct mosquitto_message *message);
+void gm_route_message(struct deferred_message *message);
 
 // publish a job status update message for the given job
 void gm_publish_job_status(int jid, const char *verb, const char *payload);

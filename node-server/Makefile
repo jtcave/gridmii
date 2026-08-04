@@ -1,6 +1,6 @@
 CFLAGS=-Wall -g -fsanitize=address
 LDFLAGS=-fsanitize=address
-LDLIBS=-lmosquitto -ljansson
+LDLIBS=-ljansson
 
 # pull in Homebrew includes/libs on macOS
 OSNAME := $(shell uname -s)

@@ -13,10 +13,6 @@
 
 #include "gm-node.h"
 
-// defined here for memory allocation purposes
-// (strangely, this doesn't seem to be in mqtt-c)
-#define MQTT_ID_MAX_LENGTH 23
-
 // vscode sucks
 #ifndef __USE_POSIX
 #define __USE_POSIX
@@ -163,7 +159,6 @@ int main(int argc, char *const *argv) {
     init_config(argc, argv);
     init_job_table();
     gm_init_mqtt();
-    gm_connect_mqtt();
     for(;;) {
         do_mqtt_events();
         do_job_events();
