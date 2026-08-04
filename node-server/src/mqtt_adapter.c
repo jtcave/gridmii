@@ -328,17 +328,16 @@ enum MQTTErrors gm_publish_json(json_t *js, const char *topic, int qos, bool ret
 
 // Disconnect from the broker and free resources
 void gm_disconnect() {
-    // Send disconect message 
+    enum MQTTErrors rv;
 
-    enum MQTTErrors rv = mqtt_publish(gm_mqtt, "node/disconnect", gm_config.node_name, strlen(gm_config.node_name), MQTT_PUBLISH_QOS_1);
-    if (rv != MQTT_OK) {
-        // we're shutting down anyway, may as well warn instead of err
-        warnx("could not send farewell: %s", mqtt_error_str(rv));
-    }
     rv = mqtt_disconnect(gm_mqtt);
     if (rv != MQTT_OK) {
         warnx("could not disconnect from broker: %s", mqtt_error_str(rv));
     }
+
+    // Manually close the socket to make sure the disconnect message made it out before we leave
+    close(gm_mqtt_params.socket_fd);
+    gm_mqtt_params.socket_fd = 0;
 }
 
 // Disconnect from the broker, free resources, and exit
