@@ -19,7 +19,7 @@ struct mosquitto *gm_mosq = NULL;
 
 void subscribe_topics(void);
 
-bool mqtt_initialized(void);
+bool is_mqtt_initialized(void);
 void assert_mqtt_initialized(void);
 void attempt_reconnect(void);
 
@@ -31,13 +31,13 @@ void has_subscribed(struct mosquitto *mosq, void *obj, int mid, int qos_count, c
 void has_disconnected(struct mosquitto *mosq, void *obj, int reason);
 
 // returhs false if MQTT hasn't been initialized - that is, if `gm_mosq` is still NULL;
-bool mqtt_initialized() {
+bool is_mqtt_initialized() {
     return gm_mosq != NULL;
 }
 
 // sanity check for initialized MQTT
 void assert_mqtt_initialized(void) {
-    if (!mqtt_initialized()) {
+    if (!is_mqtt_initialized()) {
         errx(1, "internal error - MQTT not initialized");
     }
 }
