@@ -4,13 +4,14 @@
 #include <string.h>
 #include <err.h>
 #include <errno.h>
+#include <stdio.h>
 #include <sys/utsname.h>
 #include <poll.h>
 #include <unistd.h>
 #include <netdb.h>
 #include <fcntl.h>
 
-#include <stdio.h>
+#include <openssl/bio.h>
 
 #include "gm-node.h"
 
@@ -35,7 +36,7 @@ void gm_init_mqtt(void) {
     mqtt_init_reconnect(gm_mqtt, &has_disconnected, NULL, &has_message);
     
     // clear the socket
-    gm_mqtt_params.socket_fd = 0;
+    gm_mqtt_params.broker_bio = NULL;
 }
 
 // Subscribe to all topics relevant to a node.
@@ -55,23 +56,6 @@ void subscribe_topics() {
     rv = mqtt_subscribe(gm_mqtt, "grid/#", 2);
     if (rv != MQTT_OK) {
         errx(1, "could not subscribe to grid topics: %s", mqtt_error_str(rv));
-    }
-}
-
-// Process MQTT events. This is to be called by the main event loop after polling the socket.
-void gm_process_mqtt(short revents) {
-    // process events for mqtt socket
-    enum MQTTErrors rv;
-
-    if (revents & (POLLERR | POLLHUP | POLLNVAL)) {
-        // socket broke, put it back
-        warnx("mqtt socket died, revents = 0x%hx", revents);
-        attempt_reconnect();
-    }
-    
-    rv = mqtt_sync(gm_mqtt);
-    if (rv != MQTT_OK) {
-        warnx("mqtt sync failed: %s", mqtt_error_str(rv));
     }
 }
 
@@ -174,17 +158,18 @@ void attempt_reconnect(void) {
         printf("Reconnecting to broker (%s)...\n", mqtt_error_str(gm_mqtt->error));
     }
 
-    // don't leak old sockets
-    if (gm_mqtt_params.socket_fd > 0) {
-        close(gm_mqtt_params.socket_fd);
+    // don't leak old BIOs
+    if (gm_mqtt_params.broker_bio != NULL) {
+        BIO_free_all(gm_mqtt_params.broker_bio);
     }
-    gm_mqtt_params.socket_fd = 0;
 
-    // build socket
-    gm_mqtt_params.socket_fd = connect_to_broker();
+    // build BIO
+    int fd = connect_to_broker();
+    gm_mqtt_params.broker_bio = BIO_new_socket(fd, 1);
 
     // mqtt_reinit
-    mqtt_reinit(gm_mqtt, gm_mqtt_params.socket_fd,
+
+    mqtt_reinit(gm_mqtt, gm_mqtt_params.broker_bio,
         gm_mqtt_params.xmit_buffer, GM_MQTT_XMIT_BUFFER_SIZE,
         gm_mqtt_params.recv_buffer, GM_MQTT_RECV_BUFFER_SIZE);
 
@@ -245,31 +230,17 @@ int connect_to_broker(void) {
     return fd;
 }
 
-// pump one cycle of the mqtt message loop
+// Pump the mqtt event loop
 void do_mqtt_events() {
-    struct pollfd pfd;
-    int rv;
+    enum MQTTErrors rv;
 
-    if (gm_mqtt_params.socket_fd > 0) {
-        pfd.fd = gm_mqtt_params.socket_fd;
-        pfd.events = POLLIN | POLLOUT;
-        rv = poll(&pfd, 1, DELAY_MS);
-        if (rv == -1) {
-            if (errno == EINTR || errno == EAGAIN) {
-                // just try again later
-                return;
-            }
-            else {
-                err(1, "could not poll()");
-            }
-        }
-        gm_process_mqtt(pfd.revents);
-    }
-    else {
-        gm_process_mqtt(0);
+    // Pump the client library
+    rv = mqtt_sync(gm_mqtt);
+    if (rv != MQTT_OK) {
+        warnx("mqtt sync failed: %s", mqtt_error_str(rv));
     }
 
-    // Handle messages that the callbacks saved for later
+    // Actually handle messages
     service_dmq();
 }
 
@@ -336,8 +307,8 @@ void gm_disconnect() {
     }
 
     // Manually close the socket to make sure the disconnect message made it out before we leave
-    close(gm_mqtt_params.socket_fd);
-    gm_mqtt_params.socket_fd = 0;
+    BIO_free_all(gm_mqtt_params.broker_bio);
+    gm_mqtt_params.broker_bio = NULL;
 }
 
 // Disconnect from the broker, free resources, and exit

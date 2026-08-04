@@ -68,6 +68,8 @@ extern "C" {
  */
 
 
+ #define MQTT_USE_BIO
+
 /* UNIX-like platform support */
 #if defined(__unix__) || defined(__APPLE__) || defined(__NuttX__)
     #include <limits.h>

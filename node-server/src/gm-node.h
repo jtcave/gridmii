@@ -18,6 +18,8 @@
 #include <stdbool.h>
 #include <sys/types.h>
 #include <jansson.h>
+#include <openssl/bio.h>
+
 #include "mqtt.h"
 
 /// declarations - misc system ///
@@ -57,7 +59,7 @@ extern struct mqtt_client *gm_mqtt;
 #define GM_MQTT_XMIT_BUFFER_SIZE 65535
 #define GM_MQTT_RECV_BUFFER_SIZE 65535
 struct gm_mqtt_params {
-    int socket_fd;
+    BIO *broker_bio;
     uint8_t xmit_buffer[GM_MQTT_XMIT_BUFFER_SIZE];
     uint8_t recv_buffer[GM_MQTT_RECV_BUFFER_SIZE];
 };
