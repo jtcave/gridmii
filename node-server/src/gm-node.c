@@ -11,9 +11,11 @@
 #include <fcntl.h>
 #include <sys/utsname.h>
 
-#include <mosquitto.h>
-
 #include "gm-node.h"
+
+// defined here for memory allocation purposes
+// (strangely, this doesn't seem to be in mqtt-c)
+#define MQTT_ID_MAX_LENGTH 23
 
 // vscode sucks
 #ifndef __USE_POSIX
@@ -29,7 +31,7 @@ bool gm_in_child = false;
 
 // get the default client name for mqtt (currently the system hostname)
 const char *default_node_name() {
-    static char nodebuffer[MOSQ_MQTT_ID_MAX_LENGTH + 1] = {0};
+    static char nodebuffer[MQTT_ID_MAX_LENGTH + 1] = {0};
     if (*nodebuffer == '\0') {
         // fill nodebuffer from uname()
         struct utsname the_uname;
@@ -37,7 +39,7 @@ const char *default_node_name() {
         if (rv != 0) {
             err(1, "could not get system uname");
         }
-        strncpy(nodebuffer, the_uname.nodename, MOSQ_MQTT_ID_MAX_LENGTH);
+        strncpy(nodebuffer, the_uname.nodename, MQTT_ID_MAX_LENGTH);
     }
     return nodebuffer;
 }

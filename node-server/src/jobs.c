@@ -564,8 +564,8 @@ void job_roll_call() {
     
     // publish message
     int rv = gm_publish_json(root, "node/roll_call", 2, false);
-    if (rv != MOSQ_ERR_SUCCESS) {
-        warnx("could not publish roll call: %s", mosquitto_strerror(rv));
+    if (rv != 0) { // TODO: better return value from gm_publish_json
+        warnx("could not publish roll call (error %d)", rv);
     }
 }
 
