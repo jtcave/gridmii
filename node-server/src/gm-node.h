@@ -19,6 +19,7 @@
 #include <sys/types.h>
 #include <jansson.h>
 #include <openssl/bio.h>
+#include <openssl/ssl.h>
 
 #include "mqtt.h"
 
@@ -62,6 +63,7 @@ struct gm_mqtt_params {
     BIO *broker_bio;
     uint8_t xmit_buffer[GM_MQTT_XMIT_BUFFER_SIZE];
     uint8_t recv_buffer[GM_MQTT_RECV_BUFFER_SIZE];
+    SSL_CTX *ssl_ctx;
 };
 
 // Deferred message queue

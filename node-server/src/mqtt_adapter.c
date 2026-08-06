@@ -28,6 +28,7 @@ void subscribe_topics(void);
 void attempt_reconnect(void);
 int connect_to_broker(void);
 BIO *activate_tls(BIO *socket_bio);
+void ssl_die(const char *message);
 
 // callbacks that we set
 void has_message(void **state, struct mqtt_response_publish *message);
@@ -38,8 +39,9 @@ void gm_init_mqtt(void) {
     gm_mqtt = &client_instance;
     mqtt_init_reconnect(gm_mqtt, &has_disconnected, NULL, &has_message);
     
-    // clear the socket
+    // clear the parameters
     gm_mqtt_params.broker_bio = NULL;
+    gm_mqtt_params.ssl_ctx = NULL;
 }
 
 // Subscribe to all topics relevant to a node.
@@ -165,11 +167,13 @@ void attempt_reconnect(void) {
     // don't leak old BIOs
     if (gm_mqtt_params.broker_bio != NULL) {
         BIO_free_all(gm_mqtt_params.broker_bio);
+        gm_mqtt_params.broker_bio = NULL;
     }
 
     // build BIO
     int fd = connect_to_broker();
     broker_bio = BIO_new_socket(fd, 1);
+    BIO_set_nbio(broker_bio, 1);
     if (gm_config.use_tls) {
         broker_bio = activate_tls(broker_bio);
     }
@@ -239,9 +243,80 @@ int connect_to_broker(void) {
 }
 
 // Pushes the broker BIO into a TLS BIO
-// TODO
 BIO *activate_tls(BIO *socket_bio) {
-    abort();
+    SSL_CTX *ctx;
+    SSL *ssl;
+    BIO *tls_bio;
+    int rv = -1;
+
+    // make sure we're meant to actually set up TLS
+    if (!gm_config.use_tls)
+        return socket_bio;
+    // make sure we don't have an active BIO that we'd trample
+    if (gm_mqtt_params.broker_bio != NULL)
+        return gm_mqtt_params.broker_bio;
+    
+    // make our ctx (or recycle it)
+    if (gm_mqtt_params.ssl_ctx == NULL) {
+        ctx = gm_mqtt_params.ssl_ctx = SSL_CTX_new(TLS_method());
+        // TODO: don't hardcode CA path
+        if (!SSL_CTX_load_verify_file(ctx, "gridmii.crt")) {
+            ssl_die("Could not load CA root");
+        }
+    }
+    else {
+        ctx = gm_mqtt_params.ssl_ctx;
+    }
+
+    // make the BIO
+    tls_bio = BIO_new_ssl(ctx, 1);
+    if (tls_bio == NULL) {
+        ssl_die("Could not construct TLS BIO");
+    }
+    if (BIO_get_ssl(tls_bio, &ssl) < 1) {
+        ssl_die("Could not get SSL object pointer");
+    }
+    BIO_set_nbio(tls_bio, 1);
+
+    // set up TLS
+    if (SSL_set_tlsext_host_name(ssl, gm_config.grid_host) != 1) {
+        ssl_die("Couldn't set server name for TLS SNI");
+    }
+
+    // hook the BIO chain together
+    SSL_set_bio(ssl, socket_bio, socket_bio);
+
+    // perform the handshake
+    while (rv != 1) {
+        rv = BIO_do_handshake(tls_bio);
+        if (rv != 1) {
+            if (BIO_should_retry(tls_bio)) {
+                usleep(50);
+            }
+            else {
+                int ssl_err;
+                warn("BIO_do_handshake(tls_bio) = %d", rv);
+                ssl_err = SSL_get_error(ssl, rv);
+                warnx("SSL_get_error() = %d", ssl_err);
+                ssl_die("TLS handshake failed");
+            }
+        }
+        else puts("h");
+    }
+
+    // make sure everything is ok
+    if (SSL_get_verify_result(ssl) != X509_V_OK) {
+        ssl_die("Server certificate verification failed");
+    }
+    return tls_bio;
+
+}
+
+void ssl_die(const char *message) {
+    // TODO: don't use ERR_print_errors_* because that output is *hideous*
+    warnx("%s", message);
+    ERR_print_errors_fp(stderr);
+    exit(1);
 }
 
 // Returns true if the MQTT event pump should wait for the socket
