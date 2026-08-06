@@ -1297,6 +1297,23 @@ ssize_t __mqtt_recv(struct mqtt_client *client);
 enum MQTTErrors mqtt_sync(struct mqtt_client *client);
 
 /**
+ * @brief Check for pending actions.
+ * @ingroup api
+ * 
+ * Checks the internal buffers to see if any messages are currently staged for processing.
+ * If this function returns false, mqtt_
+ * 
+ * @pre mqtt_init must have been called
+ * 
+ * @param[in] client The MQTT client
+ * 
+ * @note Even if this function doesn't return true, 
+ * 
+ * @returns 0 if anything is staged, or if the client is in an error state; otherwise, a non-zero value
+ */
+uint16_t mqtt_wants_sync(struct mqtt_client *client);
+
+/**
  * @brief Initializes an MQTT client.
  * @ingroup api
  * 

@@ -82,6 +82,38 @@ enum MQTTErrors mqtt_sync(struct mqtt_client *client) {
     return err;
 }
 
+uint16_t mqtt_wants_sync(struct mqtt_client *client) {
+    int wants = 0;
+    int queue_size;
+    int i;
+    MQTT_PAL_MUTEX_LOCK(&client->mutex);
+
+    /* If there's an error condition, then sync ought to be called */
+    if (client->error == MQTT_OK) {
+        /* Check receive buffer. */
+        if (client->recv_buffer.curr_sz == client->recv_buffer.mem_size) {
+            wants |= 1;
+        }
+        
+        /* Check send message queue */
+        queue_size = (int)mqtt_mq_length(&client->mq);
+        if (queue_size > 0) {
+            for (i = 0; i < queue_size; i++) {
+                struct mqtt_queued_message *msg = mqtt_mq_get(&client->mq, i);
+                /* "complete" entries have been sent */
+                if (msg->state == MQTT_QUEUED_UNSENT) {
+                    wants |= 2;
+                    break;
+                }
+            }
+        }
+    }
+
+    MQTT_PAL_MUTEX_UNLOCK(&client->mutex);
+
+    return wants;
+}
+
 uint16_t __mqtt_next_pid(struct mqtt_client *client) {
     int pid_exists = 0;
     if (client->pid_lfsr == 0) {
