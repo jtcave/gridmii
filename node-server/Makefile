@@ -1,6 +1,6 @@
 CFLAGS=-Wall -g -fsanitize=address
 LDFLAGS=-fsanitize=address
-LDLIBS=-ljansson -lcrypto
+LDLIBS=-ljansson -lcrypto -lssl
 
 # pull in Homebrew includes/libs on macOS
 OSNAME := $(shell uname -s)

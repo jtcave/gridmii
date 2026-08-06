@@ -12,6 +12,8 @@
 #include <fcntl.h>
 
 #include <openssl/bio.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 
 #include "gm-node.h"
 
@@ -25,6 +27,7 @@ static struct gm_mqtt_params gm_mqtt_params;
 void subscribe_topics(void);
 void attempt_reconnect(void);
 int connect_to_broker(void);
+BIO *activate_tls(BIO *socket_bio);
 
 // callbacks that we set
 void has_message(void **state, struct mqtt_response_publish *message);
@@ -147,6 +150,7 @@ void has_disconnected(struct mqtt_client *client, void **state) {
 void attempt_reconnect(void) {
     enum MQTTErrors rv;
     uint8_t flags;
+    BIO *broker_bio;
 
     const char *client_id = gm_config.node_name;
     
@@ -165,7 +169,11 @@ void attempt_reconnect(void) {
 
     // build BIO
     int fd = connect_to_broker();
-    gm_mqtt_params.broker_bio = BIO_new_socket(fd, 1);
+    broker_bio = BIO_new_socket(fd, 1);
+    if (gm_config.use_tls) {
+        broker_bio = activate_tls(broker_bio);
+    }
+    gm_mqtt_params.broker_bio = broker_bio;
 
     // mqtt_reinit
 
@@ -228,6 +236,12 @@ int connect_to_broker(void) {
     }
 
     return fd;
+}
+
+// Pushes the broker BIO into a TLS BIO
+// TODO
+BIO *activate_tls(BIO *socket_bio) {
+    abort();
 }
 
 // Returns true if the MQTT event pump should wait for the socket
