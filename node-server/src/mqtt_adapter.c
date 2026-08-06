@@ -6,8 +6,8 @@
 #include <errno.h>
 #include <stdio.h>
 #include <sys/utsname.h>
-#include <poll.h>
 #include <unistd.h>
+#include <sys/select.h>
 #include <netdb.h>
 #include <fcntl.h>
 
@@ -230,14 +230,40 @@ int connect_to_broker(void) {
     return fd;
 }
 
+// Returns true if the MQTT event pump should wait for the socket
+bool should_sleep() {
+    return mqtt_wants_sync(gm_mqtt) && !jobs_running();
+}
+
 // Pump the mqtt event loop
 void do_mqtt_events() {
-    enum MQTTErrors rv;
+    int rv;
+    enum MQTTErrors mrv;
+    int socket = -1;
+    fd_set sleep_set;
+    struct timeval timeout;
+    
+    // Sleep if there's neither data queued for send, nor jobs running, nor socket activity
+    // If there are jobs running, the job event loop will sleep waiting for job I/O.
+    if (should_sleep() && gm_mqtt_params.broker_bio != NULL) {
+        // use select to sleep on a single fd
+        rv = BIO_get_fd(gm_mqtt_params.broker_bio, &socket);
+        if (rv != -1) {
+            FD_ZERO(&sleep_set);
+            FD_SET(socket, &sleep_set);
+            timeout.tv_sec = (DELAY_MS * 1000) / 1000000;
+            timeout.tv_usec = (DELAY_MS * 1000) % 1000000;;
+            rv = select(socket+1, &sleep_set, NULL, &sleep_set, &timeout);
+            if (rv == -1 && (errno != EAGAIN && errno != EINTR)) {
+                err(1, "could not select() the MQTT socket");
+            }
+        }
+    } 
 
     // Pump the client library
-    rv = mqtt_sync(gm_mqtt);
-    if (rv != MQTT_OK) {
-        warnx("mqtt sync failed: %s", mqtt_error_str(rv));
+    mrv = mqtt_sync(gm_mqtt);
+    if (mrv != MQTT_OK) {
+        warnx("mqtt sync failed: %s", mqtt_error_str(mrv));
     }
 
     // Actually handle messages
