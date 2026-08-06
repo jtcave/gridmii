@@ -11,13 +11,13 @@
 #define GRID_PORT_DEFAULT 1883
 
 // MQTT keepalive
-#define GRID_KEEPALIVE 60
+#define GRID_KEEPALIVE 400
 
 // buffer size for subprocess stdout/stderr reads
 #define BUFFER_SIZE 1024
 
 // used as a millisecond delay value in poll(), etc.
-#define DELAY_MS 100
+#define DELAY_MS 1000
 
 // max number of concurrent jobs
 #define MAX_JOBS 4

@@ -10,7 +10,9 @@ version.h
 # vscode/jetbrains junk
 .vscode/*
 .idea/*
+node-server/.vscode/*
 
 # these guys have secrets/site config in them
 *.conf
 *.crt
+

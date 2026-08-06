@@ -1,5 +1,6 @@
-CFLAGS=-Wall -Os
-LDLIBS=-lmosquitto -ljansson
+CFLAGS=-Wall -g -fsanitize=address
+LDFLAGS=-fsanitize=address
+LDLIBS=-ljansson -lcrypto -lssl
 
 # pull in Homebrew includes/libs on macOS
 OSNAME := $(shell uname -s)
@@ -19,7 +20,7 @@ SOURCE = src
 
 HEADERS = $(SOURCE)/gm-node.h $(SOURCE)/gm-node-config.h $(SOURCE)/version.h
 
-MODULES = mqtt.c jobs.c controller.c gm-node.c
+MODULES = mqtt.c mqtt_pal.c mqtt_adapter.c jobs.c controller.c gm-node.c
 
 OUT = bin/gm-node
 OBJ = $(patsubst %.c,build/%.o,$(MODULES))
