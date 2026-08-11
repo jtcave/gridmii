@@ -43,6 +43,24 @@ void gm_publish_node_announce(const char *text) {
     fprintf(stderr, "announcement: %s\n", payload);
 }
 
+// wraps strerror to heap-allocate an error string. Caller is to free() the buffer.
+char *alloc_strerror(int error_number) {
+    char *source, *dest;
+    int len;
+    static pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
+    
+    pthread_mutex_lock(&mtx);
+    
+    source = strerror(error_number);
+    len = strlen(source);
+    dest = malloc(len + 1);
+    strcpy(dest, source);
+    
+    pthread_mutex_unlock(&mtx);
+
+    return dest;
+}
+
 // topic router
 
 /* Adding a new node topic requires:
@@ -147,8 +165,10 @@ void unpack_ttyspec(struct ttyspec *ttyspec, json_t *obj) {
 void on_submit_job(struct deferred_message *message, jid_t jid) {
     // attempt to decode
     char script[JOB_SCRIPT_LIMIT+1] = {0};
+    char *error_msg;
     struct ttyspec ttyspec;
     json_error_t j_err;
+
     json_t *payload = json_loadb(message->payload, message->payload_len, 0, &j_err);
     if (payload != NULL) {
         // fish out the script
@@ -184,27 +204,32 @@ void on_submit_job(struct deferred_message *message, jid_t jid) {
         static jid_t jid_counter = 777;
         jid = jid_counter++;
     }
-    int rv = submit_job(jid, on_stdout_mqtt, &ttyspec, script);
+    //int rv = submit_job(jid, on_stdout_mqtt, &ttyspec, script);
+    int rv = 1;
     if (rv == 0) {
         gm_publish_job_status(jid, "startup", "");
     }
     else {
-        fprintf(stderr, "couldn't start job: %s\n", strerror(rv));
-        gm_publish_job_status(jid, "reject", strerror(rv));
+        error_msg = alloc_strerror(rv);
+        fprintf(stderr, "couldn't start job: %s\n", error_msg);
+        gm_publish_job_status(jid, "reject", error_msg);
+        free(error_msg);
     }
 }
 
 void gm_route_message(struct deferred_message *message) {
+    jid_t jid = 0;
+    int signum = 0;
+    char *topic = message->topic;
+    char *error_msg;
+    char err_buf[128]; // should be larger
+
     // set up patterns
     init_topic_templates();
 
     // start matching topic patterns
-    jid_t jid = 0;
-    int signum = 0;
-    char *topic = message->topic;
 
     // submit job endpoint
-
     if (sscanf(topic, topic_patterns[TOPIC_SUBMIT_JOB], &jid) > 0) {
         on_submit_job(message, jid);
     }
@@ -214,8 +239,9 @@ void gm_route_message(struct deferred_message *message) {
         int rv = job_stdin_write(jid, message->payload, message->payload_len);
         // TODO: report stdin write error on a more appropriate channel
         if (rv != 0) {
-            char err_buf[128];
-            snprintf(err_buf, sizeof(err_buf), "error writing to job #%d stdin: %s", jid, strerror(rv));
+            error_msg = alloc_strerror(rv);
+            snprintf(err_buf, sizeof(err_buf), "error writing to job #%d stdin: %s", jid, error_msg);
+            free(error_msg);
             gm_publish_node_announce(err_buf);
         }
     }
@@ -225,8 +251,9 @@ void gm_route_message(struct deferred_message *message) {
         int rv = job_stdin_eof(jid);
         // TODO: report stdin errors on a more appropriate channel
         if (rv != 0) {
-            char err_buf[128];
-            snprintf(err_buf, sizeof(err_buf), "error closing job #%d stdin: %s", jid, strerror(rv));
+            error_msg = alloc_strerror(rv);
+            snprintf(err_buf, sizeof(err_buf), "error closing job #%d stdin: %s", jid, error_msg);
+            free(error_msg);
             gm_publish_node_announce(err_buf);
         }
     }
@@ -236,8 +263,9 @@ void gm_route_message(struct deferred_message *message) {
         int rv = job_signal(jid, signum);
         // TODO: report job manip errors on a more appropriate channel
         if (rv != 0) {
-            char err_buf[128];
-            snprintf(err_buf, sizeof(err_buf), "error signalling job #%d: %s", jid, strerror(rv));
+            error_msg = alloc_strerror(rv);
+            snprintf(err_buf, sizeof(err_buf), "error signalling job #%d: %s", jid, error_msg);
+            free(error_msg);
             gm_publish_node_announce(err_buf);
         }
     }

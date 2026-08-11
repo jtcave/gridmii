@@ -20,6 +20,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <sys/types.h>
+#include <pthread.h>
 #include <jansson.h>
 #include <openssl/bio.h>
 #include <openssl/ssl.h>
