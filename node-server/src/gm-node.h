@@ -7,12 +7,15 @@
 
 #include "gm-node-config.h"
 
+// TODO: first we declare SUSv3/UNIX 03, then we declare POSIX.1-2008.
+//       Which one is it?
 #ifndef _XOPEN_SOURCE
 #define _XOPEN_SOURCE 600
 #endif
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #endif
+#undef _GNU_SOURCE 
 
 #include <stdint.h>
 #include <stdbool.h>
