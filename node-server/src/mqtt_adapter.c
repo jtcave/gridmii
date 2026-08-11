@@ -239,6 +239,7 @@ int connect_to_broker(void) {
         err(1, "fcntl(fd, F_SETFL, O_NONBLOCK)");
     }
 
+    freeaddrinfo(ai);
     return fd;
 }
 
