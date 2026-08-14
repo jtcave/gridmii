@@ -204,8 +204,7 @@ void on_submit_job(struct deferred_message *message, jid_t jid) {
         static jid_t jid_counter = 777;
         jid = jid_counter++;
     }
-    //int rv = submit_job(jid, on_stdout_mqtt, &ttyspec, script);
-    int rv = 1;
+    int rv = submit_job(jid, on_stdout_mqtt, &ttyspec, script);
     if (rv == 0) {
         gm_publish_job_status(jid, "startup", "");
     }
