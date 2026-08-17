@@ -175,13 +175,13 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
         //      error code.
         if (transport == TRANSPORT_PIPE) {
             if (dup2(stdin_pipe[0], STDIN_FILENO) == -1) {
-                err(SPAWN_FAILURE, "could not dup2 stdin while bringing up job");
+                errtools_die(SPAWN_FAILURE, "could not dup2 stdin while bringing up job");
             }
             if (dup2(stdout_pipe[1], STDOUT_FILENO) == -1) {
-                err(SPAWN_FAILURE, "could not dup2 stdout while bringing up job");
+                errtools_die(SPAWN_FAILURE, "could not dup2 stdout while bringing up job");
             }
             if (dup2(stderr_pipe[1], STDERR_FILENO) == -1) {
-                err(SPAWN_FAILURE, "could not dup2 stderr while bringing up job");
+                errtools_die(SPAWN_FAILURE, "could not dup2 stderr while bringing up job");
             }
             // From now on, stderr goes to the parent and the user will see our
             // error messages.
@@ -194,19 +194,19 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
 
         // Next, we enter a new session, detaching from the terminal.
         if (setsid() == -1) {
-            err(SPAWN_FAILURE, "could not create session (process group) for job");
+            errtools_die(SPAWN_FAILURE, "could not create session (process group) for job");
         }
 
         // If this is a pty job, open the replica, making it the controlling tty.
         if (transport == TRANSPORT_PTY) {
             // XXX: as above, these messages won't be sent to the user
             if (grantpt(pt_primary) == -1 || unlockpt(pt_primary) == -1) {
-                err(SPAWN_FAILURE, "could not grant or unlock replica pty");
+                errtools_die(SPAWN_FAILURE, "could not grant or unlock replica pty");
             }
             const char *replica_path = ptsname(pt_primary);
             int replica = open(replica_path, O_RDWR);
             if (replica == -1) {
-                err(SPAWN_FAILURE, "could not open replica pty");
+                errtools_die(SPAWN_FAILURE, "could not open replica pty");
             }
 
             // primary fd isn't needed in the subprocess
@@ -214,13 +214,13 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
 
             // wire up the replica
             if (dup2(replica, STDIN_FILENO) == -1) {
-                err(SPAWN_FAILURE, "could not dup2 stdin while bringing up job");
+                errtools_die(SPAWN_FAILURE, "could not dup2 stdin while bringing up job");
             }
             if (dup2(replica, STDOUT_FILENO) == -1) {
-                err(SPAWN_FAILURE, "could not dup2 stdout while bringing up job");
+                errtools_die(SPAWN_FAILURE, "could not dup2 stdout while bringing up job");
             }
             if (dup2(replica, STDERR_FILENO) == -1) {
-                err(SPAWN_FAILURE, "could not dup2 stderr while bringing up job");
+                errtools_die(SPAWN_FAILURE, "could not dup2 stderr while bringing up job");
             }
 
             // export TERM
@@ -236,13 +236,13 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
             wsz.ws_xpixel = wsz.ws_ypixel = 0;  // these have no objectively true value
             rv = ioctl(replica, TIOCSWINSZ, &wsz);
             if (rv == -1) {
-                err(SPAWN_FAILURE, "ioctl TIOCSWINSZ failed while bringing up job");
+                errtools_die(SPAWN_FAILURE, "ioctl TIOCSWINSZ failed while bringing up job");
             }
         }
 
         // chdir to our new working directory
         if (chdir(gm_config.job_cwd) == -1) {
-            err(SPAWN_FAILURE, "could not chdir to node's GRID_JOB_CWD %s", gm_config.job_cwd);
+            errtools_die(SPAWN_FAILURE, "could not chdir to node's GRID_JOB_CWD");
         }
 
         // Set process limit
@@ -250,13 +250,13 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
         struct rlimit rl;
         rv = getrlimit(RLIMIT_NPROC, &rl);
         if (rv == -1) {
-            err(SPAWN_FAILURE, "could not fetch process limit");
+            errtools_die(SPAWN_FAILURE, "could not fetch process limit");
         }
         if (rl.rlim_max > PROC_LIMIT) {
             rl.rlim_cur = rl.rlim_max = PROC_LIMIT;
             rv = setrlimit(RLIMIT_NPROC, &rl);
             if (rv == -1) {
-                err(SPAWN_FAILURE, "could not set process limit");
+                errtools_die(SPAWN_FAILURE, "could not set process limit");
             }
         }
 #endif // PROC_LIMIT
@@ -266,7 +266,7 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
         execve(argv[0], argv, environ);
         
         // exec failed, break the bad news
-        err(SPAWN_FAILURE, "could not exeve new process");
+        errtools_die(SPAWN_FAILURE, "could not exeve new process");
     }
     else {
         // in parent process

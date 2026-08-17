@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <limits.h>
 #include <string.h>
+#include <errno.h>
 
 // Are we IP32/LP64 or ILP64?
 #if INT_MIN >= -2147483648
@@ -55,9 +56,9 @@ int numstr(char *buffer, int value) {
 }
 
 
-void errtools_die(int exit_code, const char *message, int errnum) {
+void errtools_die(int exit_code, const char *message) {
     char cvt[NUMSTR_BUFFER_SIZE];
-    numstr(cvt, errnum);
+    numstr(cvt, errno);
     write(STDERR_FILENO, message, strlen(message));
     write(STDERR_FILENO, ": errno ", 8);
     write(STDERR_FILENO, cvt, strlen(cvt));

@@ -17,6 +17,19 @@
 #endif
 #undef _GNU_SOURCE 
 
+// NORETURN macro
+#ifndef __STDC__
+#error "Non-standard C is not supported."
+#endif
+
+#if __STDC_VERSION__ >= 202311L
+#define NORETURN [[noreturn]]
+#elif __STDC_VERSION__ >= 201112L
+#define NORETURN _Noreturn
+#else
+#define NORETURN
+#endif
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <sys/types.h>
@@ -28,6 +41,12 @@
 #include "mqtt.h"
 
 /// declarations - misc system ///
+
+// error handling routines
+
+// Print an error message and the numeric value of errno. Then forcefully exit the process.
+// (Unlike err(3), this is safe to call within a signal handler or after forking)
+NORETURN void errtools_die(int exit_code, const char *message);
 
 // configuration table struct
 struct gm_config_data {
