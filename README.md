@@ -4,7 +4,7 @@ GridMii is the distributed public-access computing system meant to power the "Wi
 
 ## About
 
-A (former) user of the Wii Linux Discord server created a simple Python script, called Wii Bot, that would run commands sent by users on his Wii. The script was primitive, and the Python interpreter consumed a large amount of the scarce RAM on the Wii. However, the bot was popular, and demand remained even after the operator had to shut it down.
+A while back, the Wii Linux Discord server had a bot, called Wii Bot, that would run commands sent by users on a Wii. The script was primitive, and the Python interpreter consumed a large amount of the Wii's scarce RAM. However, the bot was popular, and demand remained even after the operator had to shut it down.
 
 GridMii is a more refined version of Wii Bot. The goal is to create a distributed public-access computing environment. Users can send commands to one of a set of community-operated nodes. By using the MQTT protocol, GridMii's node-end software can be small and simple, offloading system complexity to more capable modern machines and allowing prospective operators to spin up nodes easily.
 
