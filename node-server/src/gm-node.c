@@ -195,13 +195,15 @@ int main(int argc, char *const *argv) {
     // startup banner
     puts("\tGridMii node server, version " GIT_VERSION "\n");
 
-    // start up the subsystems and do an event loop
+    // start up the subsystems
     init_config(argc, argv);
     scrub_environment();
     init_job_table();
     gm_init_mqtt();
+    
+    // start the MQTT thread and start servicing the job events
+    gm_start_mqtt_thread();
     for(;;) {
-        do_mqtt_events();
         do_job_events();
     }
 }

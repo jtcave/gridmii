@@ -341,6 +341,22 @@ bool should_sleep() {
     return mqtt_wants_sync(gm_mqtt) && !jobs_running();
 }
 
+// The MQTT thread 
+void *gm_mqtt_thread_routine(void *thread_arg) {
+    for (;;) {
+        do_mqtt_events();
+    }
+}
+
+pthread_t gm_start_mqtt_thread(void) {
+    pthread_t tid;
+    int rv = pthread_create(&tid, NULL, gm_mqtt_thread_routine, NULL);
+    if (rv != 0) {
+        err(1, "could not start MQTT thread");
+    }
+    return tid;
+}
+
 // Pump the mqtt event loop
 void do_mqtt_events() {
     int rv;

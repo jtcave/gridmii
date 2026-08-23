@@ -122,6 +122,9 @@ void gm_shutdown(void);
 // reload the server from a newly installed binary
 void gm_reload(void);
 
+// spawn the MQTT thread
+pthread_t gm_start_mqtt_thread(void);
+
 /// declarations - job table ///
 
 // numeric job ID
