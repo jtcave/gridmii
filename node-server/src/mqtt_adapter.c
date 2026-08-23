@@ -68,6 +68,7 @@ void subscribe_topics() {
 
 struct deferred_message *dmq_head = NULL;
 struct deferred_message *dmq_tail = NULL;
+pthread_mutex_t dmq_lock = PTHREAD_MUTEX_INITIALIZER;
 
 // Save the body of this message into the DMQ
 void defer_message(struct mqtt_response_publish *message) {
@@ -94,6 +95,7 @@ void defer_message(struct mqtt_response_publish *message) {
     }
 
     // enqueue node
+    pthread_mutex_lock(&dmq_lock);
     if (dmq_head == NULL || dmq_tail == NULL) {
         dmq_head = dmq_tail = node;
     }
@@ -102,6 +104,7 @@ void defer_message(struct mqtt_response_publish *message) {
         dmq_tail = node;
     }
     node->next = NULL;
+    pthread_mutex_unlock(&dmq_lock);
 }
 
 // Deallocate a DMQ entry
@@ -114,13 +117,26 @@ void free_deferred_message(struct deferred_message *node) {
 
 // Process each DMQ entry. Free them afterwards.
 void service_dmq(void) {
-    while (dmq_head != NULL) {
-        struct deferred_message *here = dmq_head;
+    for (;;) {
+        struct deferred_message *here = NULL;
+
+        // Pop message off the queue
+        pthread_mutex_lock(&dmq_lock);
+        if (dmq_head != NULL) {
+            here = dmq_head;
+            dmq_head = dmq_head->next;
+            if (dmq_head == NULL) {
+                // the queue is now empty, so clear the tail
+                dmq_tail = NULL;
+            }
+        }
+        pthread_mutex_unlock(&dmq_lock);
+
+        if (here == NULL) break;
+
         gm_route_message(here);
-        dmq_head = here->next;
         free_deferred_message(here);
     }
-    dmq_tail = NULL;
 }
 
 // callbacks
