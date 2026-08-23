@@ -16,7 +16,7 @@
 // buffer size for subprocess stdout/stderr reads
 #define BUFFER_SIZE 1024
 
-// used as a millisecond delay value in poll(), etc.
+// used as a millisecond delay value in select(), etc.
 #define DELAY_MS 1000
 
 // max number of concurrent jobs

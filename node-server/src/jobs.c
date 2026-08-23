@@ -428,13 +428,18 @@ bool job_active(struct job *jobspec) {
 
 // Process events for all entries in the job table
 void do_job_events() {
+    bool visited_job = false;
     for (int i = 0; i < MAX_JOBS; i++) {
         struct job *jobspec = &job_table[i];
         if (job_active(jobspec)) {
+            visited_job = true;
             poll_job_output(jobspec);
             check_job_subprocess(jobspec);
             collect_job(jobspec);
         }
+    }
+    if (!visited_job) {
+        usleep(DELAY_MS * 1000);
     }
 }
 
