@@ -37,8 +37,8 @@ struct job job_table[MAX_JOBS];
 
 // job table synchronization objects
 pthread_mutex_t gm_job_lock = PTHREAD_MUTEX_INITIALIZER;
-bool gm_new_jobs = false;
-pthread_cond_t gm_new_jobs_c = PTHREAD_COND_INITIALIZER;
+bool gm_new_jobs_ready = false;
+pthread_cond_t gm_new_jobs_ready_c = PTHREAD_COND_INITIALIZER;
 
 
 // zero out the fields of jobspec
@@ -436,25 +436,29 @@ bool job_active(struct job *jobspec) {
 }
 
 
-// Process events for all entries in the job table
+// Job table event loop
 void do_job_events() {
-    bool visited_job = false;
-    pthread_mutex_lock(&gm_job_lock);
-    for (int i = 0; i < MAX_JOBS; i++) {
-        struct job *jobspec = &job_table[i];
-        if (job_active(jobspec)) {
-            visited_job = true;
-            poll_job_output(jobspec);
-            check_job_subprocess(jobspec);
-            collect_job(jobspec);
+    for (;;) {
+        bool visited_job = false;
+        pthread_mutex_lock(&gm_job_lock);
+        for (int i = 0; i < MAX_JOBS; i++) {
+            struct job *jobspec = &job_table[i];
+            if (job_active(jobspec)) {
+                visited_job = true;
+                poll_job_output(jobspec);
+                check_job_subprocess(jobspec);
+                collect_job(jobspec);
+            }
         }
-    }
-    pthread_mutex_unlock(&gm_job_lock);
-    if (!visited_job) {
-        usleep(DELAY_MS * 1000);
+        if (!visited_job) {
+            while (!gm_new_jobs_ready) {
+                pthread_cond_wait(&gm_new_jobs_ready_c, &gm_job_lock);
+            }
+            gm_new_jobs_ready = false;
+        }
+        pthread_mutex_unlock(&gm_job_lock);
     }
 }
-
 
 // find empty job slot, or NULL if job table is full
 // does not take the job lock; caller *must* hold it
@@ -605,6 +609,10 @@ int submit_job(jid_t jid, write_callback on_write,
     if (spawn_code != 0) {
         fprintf(stderr, "spawn_job() for jid %d returned %d\n", jid, spawn_code);
         job_rm_temp(jobspec);
+    }
+    else {
+        gm_new_jobs_ready = true;
+        pthread_cond_signal(&gm_new_jobs_ready_c);
     }
 leave:
     pthread_mutex_unlock(&gm_job_lock);

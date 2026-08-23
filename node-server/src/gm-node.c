@@ -203,7 +203,5 @@ int main(int argc, char *const *argv) {
     
     // start the MQTT thread and start servicing the job events
     gm_start_mqtt_thread();
-    for(;;) {
-        do_job_events();
-    }
+    do_job_events();
 }
