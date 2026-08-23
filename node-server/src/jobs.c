@@ -35,6 +35,12 @@ void on_write_nothing(struct job *jobspec, int source_fd, char *buffer, size_t r
 // job table
 struct job job_table[MAX_JOBS];
 
+// job table synchronization objects
+pthread_mutex_t gm_job_lock = PTHREAD_MUTEX_INITIALIZER;
+bool gm_new_jobs = false;
+pthread_cond_t gm_new_jobs_c = PTHREAD_COND_INITIALIZER;
+
+
 // zero out the fields of jobspec
 void init_job(struct job *jobspec) {
     jobspec->job_id = 0;
@@ -49,9 +55,11 @@ void init_job(struct job *jobspec) {
 }
 
 void init_job_table() {
+    pthread_mutex_lock(&gm_job_lock);
     for (int i = 0; i < MAX_JOBS; i++) {
         init_job(&job_table[i]);
     }
+    pthread_mutex_unlock(&gm_job_lock);
 }
 
 // Start a job, including the process it monitors
@@ -292,11 +300,13 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
 
 // Close stdout and stderr descriptors in the job
 void job_output_close(jid_t jid) {
+    pthread_mutex_lock(&gm_job_lock);
     struct job *jobspec = job_with_jid(jid);
     if (jobspec != NULL) {
         close_job_fd(jobspec, jobspec->job_stdout);
         close_job_fd(jobspec, jobspec->job_stderr);
     }
+    pthread_mutex_unlock(&gm_job_lock);
 }
 
 // Close the given file descriptor in the job.
@@ -429,6 +439,7 @@ bool job_active(struct job *jobspec) {
 // Process events for all entries in the job table
 void do_job_events() {
     bool visited_job = false;
+    pthread_mutex_lock(&gm_job_lock);
     for (int i = 0; i < MAX_JOBS; i++) {
         struct job *jobspec = &job_table[i];
         if (job_active(jobspec)) {
@@ -438,6 +449,7 @@ void do_job_events() {
             collect_job(jobspec);
         }
     }
+    pthread_mutex_unlock(&gm_job_lock);
     if (!visited_job) {
         usleep(DELAY_MS * 1000);
     }
@@ -445,6 +457,7 @@ void do_job_events() {
 
 
 // find empty job slot, or NULL if job table is full
+// does not take the job lock; caller *must* hold it
 struct job *empty_job_slot() {
     for (int i = 0; i < MAX_JOBS; i++) {
         struct job *jobspec = &job_table[i];
@@ -457,6 +470,7 @@ struct job *empty_job_slot() {
 }
 
 // find job with given jid
+// does not take the job lock, caller *must* hold it
 struct job *job_with_jid(jid_t jid) {
     for (int i = 0; i < MAX_JOBS; i++) {
         struct job *jobspec = &job_table[i];
@@ -469,12 +483,17 @@ struct job *job_with_jid(jid_t jid) {
 
 // returns whether jobs are running
 bool jobs_running() {
+    bool result = false;
+    pthread_mutex_lock(&gm_job_lock);
     for (int i = 0; i < MAX_JOBS; i++) {
         if (job_active(&job_table[i])) {
-            return true;
+            result = true;
+            goto finish;
         }
     }
-    return false;
+finish:
+    pthread_mutex_unlock(&gm_job_lock);
+    return result;
 }
 
 // Kill process group at the given jobspec
@@ -504,13 +523,14 @@ void job_scram() {
     // Killing the pgroup should be sufficient to clean the job table
     // as the processes dying would eventually close stdio and trigger waitpid
     fprintf(stderr, "scram invoked\n");
+    pthread_mutex_lock(&gm_job_lock);
     for (int i = 0; i < MAX_JOBS; i++) {
         struct job *jobspec = &job_table[i];
         if (job_active(jobspec)) {
             kill_job(jobspec);
         }
     }
-    return;
+    pthread_mutex_unlock(&gm_job_lock);
 }
 
 // Publish a roll call
@@ -531,6 +551,7 @@ void job_roll_call() {
     json_object_set_new(root, "jobs", job_array);
 
     // populate job array
+    pthread_mutex_lock(&gm_job_lock);
     for (int i = 0; i < MAX_JOBS; i++) {
         struct job *jobspec = &job_table[i];
         if (job_active(jobspec)) {
@@ -538,6 +559,7 @@ void job_roll_call() {
             json_array_append(job_array, j_jid);
         }
     }
+    pthread_mutex_unlock(&gm_job_lock);
     
     // publish message
     enum MQTTErrors rv = gm_publish_json(root, "node/roll_call", 2, false);
@@ -550,6 +572,7 @@ void job_roll_call() {
 int submit_job(jid_t jid, write_callback on_write,
                 struct ttyspec *ttyspec, const char *command) {
     // First, put the command in a temporary file to be used as a shell script.
+    int spawn_code;
     char *path = malloc(gm_config.tmp_name_size);
     snprintf(path, gm_config.tmp_name_size, "%s/%s", gm_config.tmpdir, TEMP_PATTERN);
     int scriptfd = mkstemp(path);
@@ -565,82 +588,106 @@ int submit_job(jid_t jid, write_callback on_write,
 
     // build argv and start the job
     char *argv[] = {(char*)gm_config.job_shell, path, NULL};
+
+    // start the job
+    pthread_mutex_lock(&gm_job_lock);
     struct job *jobspec = empty_job_slot();
     if (jobspec == NULL) {
         // this seems to be a semi-reasonable error return for "no job slots available"
-        free(path);
-        return EBUSY;
+        spawn_code = EBUSY;
+        goto leave;
     }
     // stash path to script
     memcpy(jobspec->temp_path, path, gm_config.tmp_name_size);
     
     // actually launch the job
-    int spawn_code = spawn_job(jobspec, jid, on_write, ttyspec, argv);
-    fprintf(stderr, "spawn_job() for jid %d returned %d\n", jid, spawn_code);
+    spawn_code = spawn_job(jobspec, jid, on_write, ttyspec, argv);
     if (spawn_code != 0) {
+        fprintf(stderr, "spawn_job() for jid %d returned %d\n", jid, spawn_code);
         job_rm_temp(jobspec);
     }
+leave:
+    pthread_mutex_unlock(&gm_job_lock);
     free(path);
     return spawn_code;
 }
 
 int job_stdin_write(jid_t jid, const char *data, size_t len) {
+    int code;
+    pthread_mutex_lock(&gm_job_lock);
     struct job *jobspec = job_with_jid(jid);
     if (jobspec == NULL) {
-        return ESRCH;
+        code = ESRCH;
+        goto leave;
     }
     int fd = jobspec->job_stdin;
     if (fd == -1) {
-        return EBADF;
+        code = EBADF;
+        goto leave;
     }
     int rv = write(fd, data, len);
     if (rv == -1) {
-        return errno;
+        code = errno;
     }
     else if (rv < len) {
         // short write, not good
         // since we don't have a write-later buffer, just pretend it was 100% blocked
-        return EAGAIN;  // this is what fully blocked writes will do
+        code = EAGAIN;  // this is what fully blocked writes will do
     }
     else {
-        return 0;
+        code =  0;
     }
+leave:
+    pthread_mutex_unlock(&gm_job_lock);
+    return code;
 }
 
 int job_stdin_eof(jid_t jid) {
+    int code;
+    pthread_mutex_lock(&gm_job_lock);
     struct job *jobspec = job_with_jid(jid);
     if (jobspec == NULL) {
-        return ESRCH;
+        code = ESRCH;
+        goto leave;
     }
     int fd = jobspec->job_stdin;
     if (fd == -1) {
-        return EBADF;
+        code = EBADF;
+        goto leave;
     }
     int rv = close(jobspec->job_stdin);
     if (rv == -1) {
-        return errno;
+        code = errno;
     }
     else {
         jobspec->job_stdin = -1;
-        return 0;
+        code = 0;
     }
+leave:
+    pthread_mutex_unlock(&gm_job_lock);
+    return code;
 }
 
 int job_signal(jid_t jid, int signum) {
+    int code;
+    pthread_mutex_lock(&gm_job_lock);
     fprintf(stderr, "sending signal %d to job %u\n", signum, jid);
     struct job *jobspec = job_with_jid(jid);
     if (jobspec == NULL) {
-        return ESRCH;
+        code = ESRCH;
+        goto leave;
     }
     pid_t job_pid = jobspec->job_pid;
     if (job_pid == 0) {
-        return ESRCH;
+        code = ESRCH;
+        goto leave;
     }
     else if (job_pid == -1) {
         // we do not want to send a broadcast message
         warnx("job %ud has pid -1", jid);
-        return EDOM;    // "numerical argument out of range"
+        code = EDOM;    // "numerical argument out of range"
                         // not a possible kill(2) error
+        goto leave;
     }
     
     // send the signal to the whole process group
@@ -649,9 +696,12 @@ int job_signal(jid_t jid, int signum) {
     rv = killpg(job_pid, signum);
     
     if (rv == -1) {
-        return errno;
+        code = errno;
     }
     else {
-        return 0;
+        code = 0;
     }
+leave:
+    pthread_mutex_unlock(&gm_job_lock);
+    return code;
 }
