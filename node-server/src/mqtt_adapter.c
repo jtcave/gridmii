@@ -375,7 +375,7 @@ void do_mqtt_events() {
             FD_SET(socket, &sleep_set);
             timeout.tv_sec = (DELAY_MS * 1000) / 1000000;
             timeout.tv_usec = (DELAY_MS * 1000) % 1000000;;
-            rv = select(socket+1, &sleep_set, NULL, &sleep_set, &timeout);
+            rv = select(socket+1, &sleep_set, NULL, NULL, &timeout);
             if (rv == -1 && (errno != EAGAIN && errno != EINTR)) {
                 err(1, "could not select() the MQTT socket");
             }
