@@ -58,6 +58,13 @@ void init_job_table() {
 int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
                 struct ttyspec *ttyspec, char *const *argv) {
     int rv;
+    job_transport_t transport;
+    int stdin_pipe[2] = {-1, -1},
+        stdout_pipe[2] = {-1, -1},
+        stderr_pipe[2] = {-1, -1};
+    int pt_primary = -1;
+    const char *replica_path;
+    const char *old_term;
 
     // reject null callback
     if (on_write == NULL) {
@@ -73,7 +80,7 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
     jobspec->on_write = on_write;
 
     // determine the type of transport we're going to use
-    job_transport_t transport;
+    
     if (ttyspec == NULL || !(ttyspec->set)) {
         transport = TRANSPORT_PIPE;
     }
@@ -83,10 +90,6 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
 
     // create transport for child stdio
     jobspec->transport = transport;
-    int stdin_pipe[2] = {-1, -1},
-        stdout_pipe[2] = {-1, -1},
-        stderr_pipe[2] = {-1, -1};
-    int pt_primary = -1;
     if (transport == TRANSPORT_PIPE) {
         if (pipe(stdout_pipe) != 0) {
             rv = errno;
@@ -138,6 +141,20 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
         // anyway, and having two copies of the pty will confuse the event loop
         jobspec->job_stderr = -1;
 
+        // Get the pty ready for the child to use
+        if (grantpt(pt_primary) == -1 || unlockpt(pt_primary) == -1) {
+            rv = errno;
+            warn("could not grant/unlock pty primary");
+            close(pt_primary);
+            return rv;
+        }
+        replica_path = ptsname(pt_primary);
+
+        // Set $TERM so the child inherits it
+        // TODO: this is a hideous hack and we really should build a new environment
+        //       for the subprocess instead of inheriting environ
+        old_term = getenv("TERM");
+        setenv("TERM", ttyspec->term, 1);
 
     }
     else {
@@ -199,11 +216,6 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
 
         // If this is a pty job, open the replica, making it the controlling tty.
         if (transport == TRANSPORT_PTY) {
-            // XXX: as above, these messages won't be sent to the user
-            if (grantpt(pt_primary) == -1 || unlockpt(pt_primary) == -1) {
-                errtools_die(SPAWN_FAILURE, "could not grant or unlock replica pty");
-            }
-            const char *replica_path = ptsname(pt_primary);
             int replica = open(replica_path, O_RDWR);
             if (replica == -1) {
                 errtools_die(SPAWN_FAILURE, "could not open replica pty");
@@ -223,20 +235,15 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
                 errtools_die(SPAWN_FAILURE, "could not dup2 stderr while bringing up job");
             }
 
-            // export TERM
-            rv = setenv("TERM", ttyspec->term, 1);
-            if (rv == -1) {
-                warn("could not set TERM");
-            }
-
-            // set window size per user request
+            // set window size to what the user requested
+            // XXX: ioctl is async signal unsafe, but we can't do this any earlier
             struct winsize wsz;
             wsz.ws_col = ttyspec->columns;
             wsz.ws_row = ttyspec->lines;
-            wsz.ws_xpixel = wsz.ws_ypixel = 0;  // these have no objectively true value
+            wsz.ws_xpixel = wsz.ws_ypixel = 0;  // we cannot possibly know this
             rv = ioctl(replica, TIOCSWINSZ, &wsz);
             if (rv == -1) {
-                errtools_die(SPAWN_FAILURE, "ioctl TIOCSWINSZ failed while bringing up job");
+                errtools_die(SPAWN_FAILURE, "ioctl TIOCSWINSZ failed");
             }
         }
 
@@ -277,6 +284,8 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
         close(stdout_pipe[1]);
         close(stderr_pipe[1]);
         close(stdin_pipe[0]);
+        // put TERM back
+        setenv("TERM", old_term, 1);
         return 0;
     }
 }
