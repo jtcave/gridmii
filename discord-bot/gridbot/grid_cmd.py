@@ -146,8 +146,13 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
             else:
                 # turn it on or adjust the parameters
                 if term_name == "on":
-                    # use the defaults if they say !term on
+                    # use default settings if they say !term on
                     term_name = "dumb"
+                # clamp out-of-bounds options
+                if columns <= 0:
+                    columns = 40
+                if lines <= 0:
+                    lines = 20
                 prefs.tty = (term_name, columns, lines)
                 content = f":+1: tty mode has been turned on\nTERM={term_name}, {columns} x {lines}"
                 await ctx.reply(content)
