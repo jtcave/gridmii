@@ -125,7 +125,7 @@ class UserCommandCog(GridMiiCogBase, name="User Commands"):
             table = "No jobs running"
         await ctx.reply(table)
 
-    @commands.command()
+    #@commands.command()
     async def term(self, ctx: Context, term_name:str|None=None, columns:int=40, lines:int=20):
         prefs = UserPrefs.get_prefs(ctx.author)
         if term_name is None:
