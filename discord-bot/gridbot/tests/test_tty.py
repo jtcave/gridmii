@@ -74,6 +74,18 @@ class BasicTtyTests(unittest.TestCase):
             actual = tty.render().strip()
             self.assertEqual(test_string, actual)
 
+    def test_reject_negative_dimensions(self):
+        with self.assertRaises(ValueError):
+            tty = TtyModel(columns=0)
+        with self.assertRaises(ValueError):
+            tty = TtyModel(columns=-1)
+        with self.assertRaises(ValueError):
+            tty = TtyModel(lines=0)
+        with self.assertRaises(ValueError):
+            tty = TtyModel(lines=-1)
+        tty = TtyModel(columns=5, lines=5)
+        self.assertIsInstance(tty, TtyModel)
+
 class ControlC0Tests(unittest.TestCase):
     def test_backspace(self):
         BS_SEQ = b"ono\x08e"

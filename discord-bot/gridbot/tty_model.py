@@ -18,6 +18,8 @@ class TtyState(enum.Enum):
 
 class TtyModel:
     def __init__(self, columns=40, lines=20):
+        if columns <= 0 or lines <= 0:
+            raise ValueError("columns and lines must be positive")
         self.columns = columns
         self.lines = lines
         self.char_plane = make_plane(lines, columns)
