@@ -11,8 +11,6 @@
 #include <fcntl.h>
 #include <sys/utsname.h>
 
-#include <mosquitto.h>
-
 #include "gm-node.h"
 
 // vscode sucks
@@ -27,9 +25,36 @@ struct gm_config_data gm_config;
 // flag that suppresses our atexit function in the child process
 bool gm_in_child = false;
 
+// environment variables that child processses should not inherit
+// TODO: this should really be an allowlist, not a denylist
+const char *envs_to_scrub[] = {
+    // our proprietary configuration settings
+    "GRID_HOST",
+    "GRID_PORT",
+    "GRID_TLS",
+    "GRID_USERNAME",
+    "GRID_PASSWORD",
+    "GRID_NODE_NAME",
+    "GRID_JOB_CWD",
+
+    // terminal settings
+    "TERM",
+    "TERM_PROGRAM",
+    "TERM_PROGRAM_VERSION",
+    "TMUX_PANE",
+    "COLUMNS",
+
+    // SSH info (we don't want to leak the operator's IP!)
+    "SSH_AUTH_SOCK",
+    "SSH_CLIENT",
+    "SSH_CONNECTION",
+    "SSH_TTY",
+    NULL
+};
+
 // get the default client name for mqtt (currently the system hostname)
 const char *default_node_name() {
-    static char nodebuffer[MOSQ_MQTT_ID_MAX_LENGTH + 1] = {0};
+    static char nodebuffer[MQTT_ID_MAX_LENGTH + 1] = {0};
     if (*nodebuffer == '\0') {
         // fill nodebuffer from uname()
         struct utsname the_uname;
@@ -37,7 +62,7 @@ const char *default_node_name() {
         if (rv != 0) {
             err(1, "could not get system uname");
         }
-        strncpy(nodebuffer, the_uname.nodename, MOSQ_MQTT_ID_MAX_LENGTH);
+        strncpy(nodebuffer, the_uname.nodename, MQTT_ID_MAX_LENGTH);
     }
     return nodebuffer;
 }
@@ -101,6 +126,19 @@ void init_config(int argc, char *const *argv) {
     }
 }
 
+// Delete keys that shouldn't be in a subprocess's environment
+void scrub_environment(void) {
+    const char *env_key = envs_to_scrub[0];
+    int i = 0;
+    while (env_key != NULL) {
+        int rv = unsetenv(env_key);
+        if (rv == -1) {
+            err(1, "could not scrub environment from key %s", env_key);
+        }
+        env_key = envs_to_scrub[++i];
+    }
+}
+
 void exit_cleanup(void) {
     // Don't do anything if this is one of the child processes
     if (gm_in_child) return;
@@ -157,13 +195,13 @@ int main(int argc, char *const *argv) {
     // startup banner
     puts("\tGridMii node server, version " GIT_VERSION "\n");
 
-    // start up the subsystems and do an event loop
+    // start up the subsystems
     init_config(argc, argv);
+    scrub_environment();
     init_job_table();
     gm_init_mqtt();
-    gm_connect_mqtt();
-    for(;;) {
-        do_mqtt_events();
-        do_job_events();
-    }
+    
+    // start the MQTT thread and start servicing the job events
+    gm_start_mqtt_thread();
+    do_job_events();
 }

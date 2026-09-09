@@ -14,26 +14,20 @@ The node server should build on most POSIX-ish systems (I've tested on Linux/pow
 
    This should pull in jansson as well.
 
-2) Install the `mosquitto` package:
+2) Install the dependencies:
    ```
-   sudo pacman -S mosquitto
+   sudo pacman -S openssl jansson
    ```
-   Note: this package is not part of ArchPOWER, but it is available in the Wii-Linux `[extra]` repository
 
-3) You do *not* need the Mosquitto message broker running on the node. Assuming you don't want to run a broker, ensure it's disabled:
-   ```
-   sudo systemctl disable --now mosquitto.service
-   ```
-   
-4) Build the node server:
+3) Build the node server:
    ```
    make
    ```
    There's no `./configure` script to run, and at the moment, there's no `make install` target.
 
-5) Create a `gm-node.conf` file specifying, at minimum, the MQTT broker settings. Place it in the same directory as the `gm-node` executable that was just built. Refer to `gm-node.conf.example` as a starting point.
-6) If you're using TLS, place the MQTT broker certificate in the same directory as the `gm-node` executable. Name the certificate file `gridmii.crt`.
-7) Start the node server:
+4) Create a `gm-node.conf` file specifying, at minimum, the MQTT broker settings. Place it in the same directory as the `gm-node` executable that was just built. Refer to `gm-node.conf.example` as a starting point.
+5) If you're using TLS, place the MQTT broker certificate in the same directory as the `gm-node` executable. Name the certificate file `gridmii.crt`.
+6) Start the node server:
    ```
    ./start_node.sh
    ```
@@ -47,15 +41,13 @@ The node server can be stopped by pressing Ctrl-C. If you want to run the node s
 You can follow the same instructions as above, except replace the pacman commands with:
 
 ```
-sudo apt install build-essential libmosquitto-dev libjansson-dev
+sudo apt install build-essential libssl-dev libjansson-dev
 ```
-
-This won't install the mosquitto server, so you can skip step 3.
 
 ### NetBSD
 
 ```
-pkgin in gmake mosquitto jansson
+pkgin in gmake jansson
 ```
 
 The Makefile requires GNU Make; it will not build with the NetBSD `make` command.
@@ -63,13 +55,13 @@ The Makefile requires GNU Make; it will not build with the NetBSD `make` command
 ### macOS
 
 ```
-brew install mosquitto jansson
+brew install jansson openssl@3
 ```
 
 ### Alpine
 
 ```
-apk add build-base mosquitto-dev jansson-dev
+apk add build-base openssl3-dev jansson-dev
 ```
 
 ## Isolating jobs
@@ -80,7 +72,7 @@ As an example, the `contain.sh` script will run a job in a systemd container nam
 
 ***TODO: instructions on setting up systemd containers***
 
-For testing and demonstration purposes, a Dockerfile that sets up an Alpine container is supplied. Mount a volume with a `gm-node.conf` and `gridmii.crt` files into `/gridmii/data`. **Note that the Dockerfile is configured to run the node server as root.**
+For testing and demonstration purposes, a Dockerfile that sets up an Alpine container is supplied. Mount a volume with the `gm-node.conf` and `gridmii.crt` files into `/gridmii/data`. **Note that the Dockerfile is configured to run the node server as root.**
 
 ## Configuration reference
 

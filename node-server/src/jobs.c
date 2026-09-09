@@ -22,31 +22,6 @@ void close_job_fd(struct job *jobspec, int fd);
 // exit code for a job that failed to exec for one reason or another
 #define SPAWN_FAILURE 0xEE
 
-// environment variables that should not be set in the child
-const char *envs_to_scrub[] = {
-    // our proprietary configuration settings
-    "GRID_HOST",
-    "GRID_PORT",
-    "GRID_TLS",
-    "GRID_USERNAME",
-    "GRID_PASSWORD",
-    "GRID_NODE_NAME",
-    "GRID_JOB_CWD",
-
-    // terminal settings (these would mislead the program into)
-    "TERM",
-    "TERM_PROGRAM",
-    "TERM_PROGRAM_VERSION",
-    "TMUX_PANE",
-    "COLUMNS",
-
-    // SSH info (we don't want to leak the operator's IP!)
-    "SSH_CLIENT",
-    "SSH_CONNECTION",
-    "SSH_TTY",
-    NULL
-};
-
 // no-op write callback
 void on_write_nothing(struct job *jobspec, int source_fd, char *buffer, size_t readsize) {
     // shut the hell up, clang
@@ -59,6 +34,12 @@ void on_write_nothing(struct job *jobspec, int source_fd, char *buffer, size_t r
 
 // job table
 struct job job_table[MAX_JOBS];
+
+// job table synchronization objects
+pthread_mutex_t gm_job_lock = PTHREAD_MUTEX_INITIALIZER;
+bool gm_new_jobs_ready = false;
+pthread_cond_t gm_new_jobs_ready_c = PTHREAD_COND_INITIALIZER;
+
 
 // zero out the fields of jobspec
 void init_job(struct job *jobspec) {
@@ -74,15 +55,24 @@ void init_job(struct job *jobspec) {
 }
 
 void init_job_table() {
+    pthread_mutex_lock(&gm_job_lock);
     for (int i = 0; i < MAX_JOBS; i++) {
         init_job(&job_table[i]);
     }
+    pthread_mutex_unlock(&gm_job_lock);
 }
 
 // Start a job, including the process it monitors
 int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
                 struct ttyspec *ttyspec, char *const *argv) {
     int rv;
+    job_transport_t transport;
+    int stdin_pipe[2] = {-1, -1},
+        stdout_pipe[2] = {-1, -1},
+        stderr_pipe[2] = {-1, -1};
+    int pt_primary = -1;
+    const char *replica_path;
+    const char *old_term;
 
     // reject null callback
     if (on_write == NULL) {
@@ -98,7 +88,7 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
     jobspec->on_write = on_write;
 
     // determine the type of transport we're going to use
-    job_transport_t transport;
+    
     if (ttyspec == NULL || !(ttyspec->set)) {
         transport = TRANSPORT_PIPE;
     }
@@ -108,10 +98,6 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
 
     // create transport for child stdio
     jobspec->transport = transport;
-    int stdin_pipe[2] = {-1, -1},
-        stdout_pipe[2] = {-1, -1},
-        stderr_pipe[2] = {-1, -1};
-    int pt_primary = -1;
     if (transport == TRANSPORT_PIPE) {
         if (pipe(stdout_pipe) != 0) {
             rv = errno;
@@ -163,6 +149,20 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
         // anyway, and having two copies of the pty will confuse the event loop
         jobspec->job_stderr = -1;
 
+        // Get the pty ready for the child to use
+        if (grantpt(pt_primary) == -1 || unlockpt(pt_primary) == -1) {
+            rv = errno;
+            warn("could not grant/unlock pty primary");
+            close(pt_primary);
+            return rv;
+        }
+        replica_path = ptsname(pt_primary);
+
+        // Set $TERM so the child inherits it
+        // TODO: this is a hideous hack and we really should build a new environment
+        //       for the subprocess instead of inheriting environ
+        old_term = getenv("TERM");
+        setenv("TERM", ttyspec->term, 1);
 
     }
     else {
@@ -200,13 +200,13 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
         //      error code.
         if (transport == TRANSPORT_PIPE) {
             if (dup2(stdin_pipe[0], STDIN_FILENO) == -1) {
-                err(SPAWN_FAILURE, "could not dup2 stdin while bringing up job");
+                errtools_die(SPAWN_FAILURE, "could not dup2 stdin while bringing up job");
             }
             if (dup2(stdout_pipe[1], STDOUT_FILENO) == -1) {
-                err(SPAWN_FAILURE, "could not dup2 stdout while bringing up job");
+                errtools_die(SPAWN_FAILURE, "could not dup2 stdout while bringing up job");
             }
             if (dup2(stderr_pipe[1], STDERR_FILENO) == -1) {
-                err(SPAWN_FAILURE, "could not dup2 stderr while bringing up job");
+                errtools_die(SPAWN_FAILURE, "could not dup2 stderr while bringing up job");
             }
             // From now on, stderr goes to the parent and the user will see our
             // error messages.
@@ -219,19 +219,14 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
 
         // Next, we enter a new session, detaching from the terminal.
         if (setsid() == -1) {
-            err(SPAWN_FAILURE, "could not create session (process group) for job");
+            errtools_die(SPAWN_FAILURE, "could not create session (process group) for job");
         }
 
         // If this is a pty job, open the replica, making it the controlling tty.
         if (transport == TRANSPORT_PTY) {
-            // XXX: as above, these messages won't be sent to the user
-            if (grantpt(pt_primary) == -1 || unlockpt(pt_primary) == -1) {
-                err(SPAWN_FAILURE, "could not grant or unlock replica pty");
-            }
-            const char *replica_path = ptsname(pt_primary);
             int replica = open(replica_path, O_RDWR);
             if (replica == -1) {
-                err(SPAWN_FAILURE, "could not open replica pty");
+                errtools_die(SPAWN_FAILURE, "could not open replica pty");
             }
 
             // primary fd isn't needed in the subprocess
@@ -239,47 +234,30 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
 
             // wire up the replica
             if (dup2(replica, STDIN_FILENO) == -1) {
-                err(SPAWN_FAILURE, "could not dup2 stdin while bringing up job");
+                errtools_die(SPAWN_FAILURE, "could not dup2 stdin while bringing up job");
             }
             if (dup2(replica, STDOUT_FILENO) == -1) {
-                err(SPAWN_FAILURE, "could not dup2 stdout while bringing up job");
+                errtools_die(SPAWN_FAILURE, "could not dup2 stdout while bringing up job");
             }
             if (dup2(replica, STDERR_FILENO) == -1) {
-                err(SPAWN_FAILURE, "could not dup2 stderr while bringing up job");
+                errtools_die(SPAWN_FAILURE, "could not dup2 stderr while bringing up job");
             }
 
-            // export TERM
-            rv = setenv("TERM", ttyspec->term, 1);
-            if (rv == -1) {
-                warn("could not set TERM");
-            }
-
-            // set window size per user request
+            // set window size to what the user requested
+            // XXX: ioctl is async signal unsafe, but we can't do this any earlier
             struct winsize wsz;
             wsz.ws_col = ttyspec->columns;
             wsz.ws_row = ttyspec->lines;
-            wsz.ws_xpixel = wsz.ws_ypixel = 0;  // these have no objectively true value
+            wsz.ws_xpixel = wsz.ws_ypixel = 0;  // we cannot possibly know this
             rv = ioctl(replica, TIOCSWINSZ, &wsz);
             if (rv == -1) {
-                err(SPAWN_FAILURE, "ioctl TIOCSWINSZ failed while bringing up job");
+                errtools_die(SPAWN_FAILURE, "ioctl TIOCSWINSZ failed");
             }
         }
 
         // chdir to our new working directory
         if (chdir(gm_config.job_cwd) == -1) {
-            err(SPAWN_FAILURE, "could not chdir to node's GRID_JOB_CWD %s", gm_config.job_cwd);
-        }
-
-        // the new process will inherit a scrubbed version of our environment
-        // XXX: this really should be an allowlist instead of a denylist
-        const char *env_key = envs_to_scrub[0];
-        int i = 0;
-        while (env_key != NULL) {
-            int rv = unsetenv(env_key);
-            if (rv == -1) {
-                err(SPAWN_FAILURE, "could not scrub environment from key %s", env_key);
-            }
-            env_key = envs_to_scrub[++i];
+            errtools_die(SPAWN_FAILURE, "could not chdir to node's GRID_JOB_CWD");
         }
 
         // Set process limit
@@ -287,13 +265,13 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
         struct rlimit rl;
         rv = getrlimit(RLIMIT_NPROC, &rl);
         if (rv == -1) {
-            err(SPAWN_FAILURE, "could not fetch process limit");
+            errtools_die(SPAWN_FAILURE, "could not fetch process limit");
         }
         if (rl.rlim_max > PROC_LIMIT) {
             rl.rlim_cur = rl.rlim_max = PROC_LIMIT;
             rv = setrlimit(RLIMIT_NPROC, &rl);
             if (rv == -1) {
-                err(SPAWN_FAILURE, "could not set process limit");
+                errtools_die(SPAWN_FAILURE, "could not set process limit");
             }
         }
 #endif // PROC_LIMIT
@@ -303,7 +281,7 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
         execve(argv[0], argv, environ);
         
         // exec failed, break the bad news
-        err(SPAWN_FAILURE, "could not exeve new process");
+        errtools_die(SPAWN_FAILURE, "could not exeve new process");
     }
     else {
         // in parent process
@@ -314,17 +292,21 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
         close(stdout_pipe[1]);
         close(stderr_pipe[1]);
         close(stdin_pipe[0]);
+        // put TERM back
+        setenv("TERM", old_term, 1);
         return 0;
     }
 }
 
 // Close stdout and stderr descriptors in the job
 void job_output_close(jid_t jid) {
+    pthread_mutex_lock(&gm_job_lock);
     struct job *jobspec = job_with_jid(jid);
     if (jobspec != NULL) {
         close_job_fd(jobspec, jobspec->job_stdout);
         close_job_fd(jobspec, jobspec->job_stderr);
     }
+    pthread_mutex_unlock(&gm_job_lock);
 }
 
 // Close the given file descriptor in the job.
@@ -454,20 +436,32 @@ bool job_active(struct job *jobspec) {
 }
 
 
-// Process events for all entries in the job table
+// Job table event loop
 void do_job_events() {
-    for (int i = 0; i < MAX_JOBS; i++) {
-        struct job *jobspec = &job_table[i];
-        if (job_active(jobspec)) {
-            poll_job_output(jobspec);
-            check_job_subprocess(jobspec);
-            collect_job(jobspec);
+    for (;;) {
+        bool visited_job = false;
+        pthread_mutex_lock(&gm_job_lock);
+        for (int i = 0; i < MAX_JOBS; i++) {
+            struct job *jobspec = &job_table[i];
+            if (job_active(jobspec)) {
+                visited_job = true;
+                poll_job_output(jobspec);
+                check_job_subprocess(jobspec);
+                collect_job(jobspec);
+            }
         }
+        if (!visited_job) {
+            while (!gm_new_jobs_ready) {
+                pthread_cond_wait(&gm_new_jobs_ready_c, &gm_job_lock);
+            }
+            gm_new_jobs_ready = false;
+        }
+        pthread_mutex_unlock(&gm_job_lock);
     }
 }
 
-
 // find empty job slot, or NULL if job table is full
+// does not take the job lock; caller *must* hold it
 struct job *empty_job_slot() {
     for (int i = 0; i < MAX_JOBS; i++) {
         struct job *jobspec = &job_table[i];
@@ -480,6 +474,7 @@ struct job *empty_job_slot() {
 }
 
 // find job with given jid
+// does not take the job lock, caller *must* hold it
 struct job *job_with_jid(jid_t jid) {
     for (int i = 0; i < MAX_JOBS; i++) {
         struct job *jobspec = &job_table[i];
@@ -492,12 +487,17 @@ struct job *job_with_jid(jid_t jid) {
 
 // returns whether jobs are running
 bool jobs_running() {
+    bool result = false;
+    pthread_mutex_lock(&gm_job_lock);
     for (int i = 0; i < MAX_JOBS; i++) {
         if (job_active(&job_table[i])) {
-            return true;
+            result = true;
+            goto finish;
         }
     }
-    return false;
+finish:
+    pthread_mutex_unlock(&gm_job_lock);
+    return result;
 }
 
 // Kill process group at the given jobspec
@@ -527,13 +527,14 @@ void job_scram() {
     // Killing the pgroup should be sufficient to clean the job table
     // as the processes dying would eventually close stdio and trigger waitpid
     fprintf(stderr, "scram invoked\n");
+    pthread_mutex_lock(&gm_job_lock);
     for (int i = 0; i < MAX_JOBS; i++) {
         struct job *jobspec = &job_table[i];
         if (job_active(jobspec)) {
             kill_job(jobspec);
         }
     }
-    return;
+    pthread_mutex_unlock(&gm_job_lock);
 }
 
 // Publish a roll call
@@ -554,6 +555,7 @@ void job_roll_call() {
     json_object_set_new(root, "jobs", job_array);
 
     // populate job array
+    pthread_mutex_lock(&gm_job_lock);
     for (int i = 0; i < MAX_JOBS; i++) {
         struct job *jobspec = &job_table[i];
         if (job_active(jobspec)) {
@@ -561,11 +563,12 @@ void job_roll_call() {
             json_array_append(job_array, j_jid);
         }
     }
+    pthread_mutex_unlock(&gm_job_lock);
     
     // publish message
-    int rv = gm_publish_json(root, "node/roll_call", 2, false);
-    if (rv != MOSQ_ERR_SUCCESS) {
-        warnx("could not publish roll call: %s", mosquitto_strerror(rv));
+    enum MQTTErrors rv = gm_publish_json(root, "node/roll_call", 2, false);
+    if (rv != MQTT_OK) {
+        warnx("could not publish roll call: %s", mqtt_error_str(rv));
     }
 }
 
@@ -573,6 +576,7 @@ void job_roll_call() {
 int submit_job(jid_t jid, write_callback on_write,
                 struct ttyspec *ttyspec, const char *command) {
     // First, put the command in a temporary file to be used as a shell script.
+    int spawn_code;
     char *path = malloc(gm_config.tmp_name_size);
     snprintf(path, gm_config.tmp_name_size, "%s/%s", gm_config.tmpdir, TEMP_PATTERN);
     int scriptfd = mkstemp(path);
@@ -588,82 +592,110 @@ int submit_job(jid_t jid, write_callback on_write,
 
     // build argv and start the job
     char *argv[] = {(char*)gm_config.job_shell, path, NULL};
+
+    // start the job
+    pthread_mutex_lock(&gm_job_lock);
     struct job *jobspec = empty_job_slot();
     if (jobspec == NULL) {
         // this seems to be a semi-reasonable error return for "no job slots available"
-        free(path);
-        return EBUSY;
+        spawn_code = EBUSY;
+        goto leave;
     }
     // stash path to script
     memcpy(jobspec->temp_path, path, gm_config.tmp_name_size);
     
     // actually launch the job
-    int spawn_code = spawn_job(jobspec, jid, on_write, ttyspec, argv);
-    fprintf(stderr, "spawn_job() for jid %d returned %d\n", jid, spawn_code);
+    spawn_code = spawn_job(jobspec, jid, on_write, ttyspec, argv);
     if (spawn_code != 0) {
+        fprintf(stderr, "spawn_job() for jid %d returned %d\n", jid, spawn_code);
         job_rm_temp(jobspec);
     }
+    else {
+        gm_new_jobs_ready = true;
+        pthread_cond_signal(&gm_new_jobs_ready_c);
+    }
+leave:
+    pthread_mutex_unlock(&gm_job_lock);
     free(path);
     return spawn_code;
 }
 
 int job_stdin_write(jid_t jid, const char *data, size_t len) {
+    int code;
+    pthread_mutex_lock(&gm_job_lock);
     struct job *jobspec = job_with_jid(jid);
     if (jobspec == NULL) {
-        return ESRCH;
+        code = ESRCH;
+        goto leave;
     }
     int fd = jobspec->job_stdin;
     if (fd == -1) {
-        return EBADF;
+        code = EBADF;
+        goto leave;
     }
     int rv = write(fd, data, len);
     if (rv == -1) {
-        return errno;
+        code = errno;
     }
     else if (rv < len) {
         // short write, not good
         // since we don't have a write-later buffer, just pretend it was 100% blocked
-        return EAGAIN;  // this is what fully blocked writes will do
+        code = EAGAIN;  // this is what fully blocked writes will do
     }
     else {
-        return 0;
+        code =  0;
     }
+leave:
+    pthread_mutex_unlock(&gm_job_lock);
+    return code;
 }
 
 int job_stdin_eof(jid_t jid) {
+    int code;
+    pthread_mutex_lock(&gm_job_lock);
     struct job *jobspec = job_with_jid(jid);
     if (jobspec == NULL) {
-        return ESRCH;
+        code = ESRCH;
+        goto leave;
     }
     int fd = jobspec->job_stdin;
     if (fd == -1) {
-        return EBADF;
+        code = EBADF;
+        goto leave;
     }
     int rv = close(jobspec->job_stdin);
     if (rv == -1) {
-        return errno;
+        code = errno;
     }
     else {
         jobspec->job_stdin = -1;
-        return 0;
+        code = 0;
     }
+leave:
+    pthread_mutex_unlock(&gm_job_lock);
+    return code;
 }
 
 int job_signal(jid_t jid, int signum) {
+    int code;
+    pthread_mutex_lock(&gm_job_lock);
     fprintf(stderr, "sending signal %d to job %u\n", signum, jid);
     struct job *jobspec = job_with_jid(jid);
     if (jobspec == NULL) {
-        return ESRCH;
+        code = ESRCH;
+        goto leave;
     }
     pid_t job_pid = jobspec->job_pid;
     if (job_pid == 0) {
-        return ESRCH;
+        code = ESRCH;
+        goto leave;
     }
     else if (job_pid == -1) {
         // we do not want to send a broadcast message
         warnx("job %ud has pid -1", jid);
-        return EDOM;    // "numerical argument out of range"
+        code = EDOM;    // "numerical argument out of range"
                         // not a possible kill(2) error
+        goto leave;
     }
     
     // send the signal to the whole process group
@@ -672,9 +704,12 @@ int job_signal(jid_t jid, int signum) {
     rv = killpg(job_pid, signum);
     
     if (rv == -1) {
-        return errno;
+        code = errno;
     }
     else {
-        return 0;
+        code = 0;
     }
+leave:
+    pthread_mutex_unlock(&gm_job_lock);
+    return code;
 }
