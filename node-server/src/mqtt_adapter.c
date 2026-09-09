@@ -220,43 +220,60 @@ void attempt_reconnect(void) {
     puts("Connected.");
 }
 
-// establish a TCP connection to the broker, returning the socket
-// TODO: auto-retry
+// establish a TCP connection to the broker, returning the socket.
+// Retries indefinitely with exponential backoff (capped at MAX_DELAY)
+// on any failure, since this is also used to reconnect after a drop.
 int connect_to_broker(void) {
-    // int delay = MIN_DELAY;
+    int delay = MIN_DELAY;
     int rv;
     int fd = -1;
     struct addrinfo hint;
     struct addrinfo *ai;
     char portbuf[8];
 
-    // address lookup
-    memset(&hint, 0, sizeof hint);
-    hint.ai_family = AF_INET; // TODO: change this to AF_UNSPEC
-    hint.ai_socktype = SOCK_STREAM;
-    snprintf(portbuf, 8, "%d", gm_config.grid_port);
-    rv = getaddrinfo(gm_config.grid_host, portbuf, &hint, &ai);
-    if (rv != 0 || ai == NULL) {
-        errx(1, "could not look up address for GRID_HOST: %s", gai_strerror(rv));
-    }
+    for (;;) {
+        // address lookup
+        memset(&hint, 0, sizeof hint);
+        hint.ai_family = AF_INET; // TODO: change this to AF_UNSPEC
+        hint.ai_socktype = SOCK_STREAM;
+        snprintf(portbuf, 8, "%d", gm_config.grid_port);
+        rv = getaddrinfo(gm_config.grid_host, portbuf, &hint, &ai);
+        if (rv != 0 || ai == NULL) {
+            warnx("could not look up address for GRID_HOST: %s", gai_strerror(rv));
+            goto retry;
+        }
 
-    fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
-    if (fd == -1) {
-        err(1, "could not create socket");
-    }
+        fd = socket(ai->ai_family, ai->ai_socktype, ai->ai_protocol);
+        if (fd == -1) {
+            warn("could not create socket");
+            freeaddrinfo(ai);
+            goto retry;
+        }
 
-    rv = connect(fd, ai->ai_addr, ai->ai_addrlen);
-    if (rv == -1) {
-        err(1, "could not connect to broker");
-    }
+        rv = connect(fd, ai->ai_addr, ai->ai_addrlen);
+        freeaddrinfo(ai);
+        if (rv == -1) {
+            warn("could not connect to broker");
+            close(fd);
+            fd = -1;
+            goto retry;
+        }
 
-    rv = fcntl(fd, F_SETFL, O_NONBLOCK);
-    if (rv == -1) {
-        err(1, "fcntl(fd, F_SETFL, O_NONBLOCK)");
-    }
+        rv = fcntl(fd, F_SETFL, O_NONBLOCK);
+        if (rv == -1) {
+            err(1, "fcntl(fd, F_SETFL, O_NONBLOCK)");
+        }
 
-    freeaddrinfo(ai);
-    return fd;
+        return fd;
+
+    retry:
+        warnx("retrying connection in %d second%s...", delay, delay == 1 ? "" : "s");
+        sleep(delay);
+        delay *= 2;
+        if (delay > MAX_DELAY) {
+            delay = MAX_DELAY;
+        }
+    }
 }
 
 // Pushes the broker BIO into a TLS BIO
