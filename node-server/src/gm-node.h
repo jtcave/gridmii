@@ -70,6 +70,9 @@ extern struct gm_config_data gm_config;
 // flag that suppresses our atexit function in the child process
 extern bool gm_in_child;
 
+// the running MQTT thread's id (0 before it's started)
+extern pthread_t mqtt_thread;
+
 /// declarations - mqtt ///
 
 // defined here for memory allocation purposes

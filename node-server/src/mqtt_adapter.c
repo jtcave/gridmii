@@ -10,6 +10,7 @@
 #include <sys/select.h>
 #include <netdb.h>
 #include <fcntl.h>
+#include <stdatomic.h>
 
 #include <openssl/bio.h>
 #include <openssl/ssl.h>
@@ -23,6 +24,10 @@ static struct mqtt_client client_instance;
 
 // params for the object
 static struct gm_mqtt_params gm_mqtt_params;
+
+// set by stop_mqtt_thread() to tell the MQTT thread to give up and exit,
+// whether it's idling in its event loop or stuck retrying a connection
+static atomic_bool gm_mqtt_stop = false;
 
 void subscribe_topics(void);
 void attempt_reconnect(void);
@@ -232,6 +237,11 @@ int connect_to_broker(void) {
     char portbuf[8];
 
     for (;;) {
+        // give up on connecting (and let this thread exit) if we're shutting down
+        if (gm_mqtt_stop) {
+            pthread_exit(NULL);
+        }
+
         // address lookup
         memset(&hint, 0, sizeof hint);
         hint.ai_family = AF_INET; // TODO: change this to AF_UNSPEC
@@ -268,7 +278,14 @@ int connect_to_broker(void) {
 
     retry:
         warnx("retrying connection in %d second%s...", delay, delay == 1 ? "" : "s");
-        sleep(delay);
+        // sleep in 1-second increments so a shutdown request is noticed promptly
+        // even during a long backoff delay
+        for (int slept = 0; slept < delay; slept++) {
+            if (gm_mqtt_stop) {
+                pthread_exit(NULL);
+            }
+            sleep(1);
+        }
         delay *= 2;
         if (delay > MAX_DELAY) {
             delay = MAX_DELAY;
@@ -358,11 +375,12 @@ bool should_sleep() {
     return mqtt_wants_sync(gm_mqtt) && !jobs_running();
 }
 
-// The MQTT thread 
+// The MQTT thread
 void *gm_mqtt_thread_routine(void *thread_arg) {
-    for (;;) {
+    while (!gm_mqtt_stop) {
         do_mqtt_events();
     }
+    return NULL;
 }
 
 pthread_t gm_start_mqtt_thread(void) {
@@ -372,6 +390,14 @@ pthread_t gm_start_mqtt_thread(void) {
         err(1, "could not start MQTT thread");
     }
     return tid;
+}
+
+// Tell the MQTT thread to stop and join it (if called from another thread)
+static void stop_mqtt_thread(void) {
+    gm_mqtt_stop = true;
+    if (mqtt_thread != 0 && !pthread_equal(pthread_self(), mqtt_thread)) {
+        pthread_join(mqtt_thread, NULL);
+    }
 }
 
 // Pump the mqtt event loop
@@ -466,6 +492,8 @@ enum MQTTErrors gm_publish_json(json_t *js, const char *topic, int qos, bool ret
 void gm_disconnect() {
     enum MQTTErrors rv;
 
+    stop_mqtt_thread();
+
     rv = mqtt_disconnect(gm_mqtt);
     if (rv != MQTT_OK) {
         warnx("could not disconnect from broker: %s", mqtt_error_str(rv));
@@ -482,6 +510,8 @@ void gm_disconnect() {
 // Disconnect from the broker immediately without calling into the MQTT library.
 // (This avoids deadlocking in a signal handler.)
 void gm_shutdown() {
+    stop_mqtt_thread();
     BIO_free_all(gm_mqtt_params.broker_bio);
+    gm_mqtt_params.broker_bio = NULL;
     exit(0);
 }

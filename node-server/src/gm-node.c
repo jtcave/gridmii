@@ -25,6 +25,9 @@ struct gm_config_data gm_config;
 // flag that suppresses our atexit function in the child process
 bool gm_in_child = false;
 
+// thread IDs
+pthread_t mqtt_thread = 0;
+
 // environment variables that child processses should not inherit
 // TODO: this should really be an allowlist, not a denylist
 const char *envs_to_scrub[] = {
@@ -202,6 +205,6 @@ int main(int argc, char *const *argv) {
     gm_init_mqtt();
     
     // start the MQTT thread and start servicing the job events
-    gm_start_mqtt_thread();
+    mqtt_thread = gm_start_mqtt_thread();
     do_job_events();
 }
