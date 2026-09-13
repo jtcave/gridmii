@@ -150,13 +150,16 @@ void exit_cleanup(void) {
     puts("\nnode server has exited\n");
 }
 
+// Async-signal-safe SIGINT handler. Only sets a flag; the actual shutdown
+// work happens later in gm_service_events(), which runs in normal thread
+// context and can safely do things like join threads or call exit().
 void sigint_cleanup(int signum) {
     if (signum == SIGINT) {
-        fprintf(stderr, "\nshutting down due to SIGINT...\n");
-        gm_shutdown();
+        gm_request_shutdown();
     }
     else {
-        fprintf(stderr, "signal handler called on unexpected signal %d\n", signum);
+        static const char msg[] = "signal handler called on unexpected signal\n";
+        write(STDERR_FILENO, msg, sizeof(msg) - 1);
         abort();
     }
 }

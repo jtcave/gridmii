@@ -40,6 +40,10 @@
 
 #include "mqtt.h"
 
+// defined here for memory allocation purposes
+// (strangely, this doesn't seem to be in mqtt-c)
+#define MQTT_ID_MAX_LENGTH 23
+
 /// declarations - misc system ///
 
 // error handling routines
@@ -73,11 +77,35 @@ extern bool gm_in_child;
 // the running MQTT thread's id (0 before it's started)
 extern pthread_t mqtt_thread;
 
-/// declarations - mqtt ///
+/// declarations - event queue ///
 
-// defined here for memory allocation purposes
-// (strangely, this doesn't seem to be in mqtt-c)
-#define MQTT_ID_MAX_LENGTH 23
+struct deferred_message {
+    char topic[MQTT_ID_MAX_LENGTH + 1];
+    char *payload;
+    size_t payload_len;
+    struct deferred_message *next;
+};
+
+// Save the body of this message into the event queue
+void gm_defer_message(struct mqtt_response_publish *message);
+
+// Process each event in the queue, freeing them afterwards.
+// Also where a pending shutdown request (see gm_request_shutdown) is
+// actually carried out, since this always runs in normal thread context.
+void gm_service_events(void);
+
+// Request that the server shut down at the next opportunity.
+// Async-signal-safe: only sets a flag, so this is safe to call from
+// a signal handler such as sigint_cleanup().
+void gm_request_shutdown(void);
+
+// Returns true if gm_request_shutdown() has been called.
+// Polled by code that can block for a while (e.g. the broker reconnect
+// loop) so a shutdown is noticed even when gm_service_events() isn't
+// being reached.
+bool gm_shutdown_pending(void);
+
+/// declarations - mqtt ///
 
 // global mqtt object
 extern struct mqtt_client *gm_mqtt;
@@ -90,16 +118,6 @@ struct gm_mqtt_params {
     uint8_t xmit_buffer[GM_MQTT_XMIT_BUFFER_SIZE];
     uint8_t recv_buffer[GM_MQTT_RECV_BUFFER_SIZE];
     SSL_CTX *ssl_ctx;
-};
-
-// Deferred message queue
-// We have to store message contents for later because MQTT-C does not
-// allow users to call mqtt_publish from a callback context.
-struct deferred_message {
-    char topic[MQTT_ID_MAX_LENGTH + 1];
-    char *payload;
-    size_t payload_len;
-    struct deferred_message *next;
 };
 
 // Connect to the broker and initialize MQTT

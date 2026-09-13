@@ -69,81 +69,6 @@ void subscribe_topics() {
     }
 }
 
-// Deferred message queue
-
-struct deferred_message *dmq_head = NULL;
-struct deferred_message *dmq_tail = NULL;
-pthread_mutex_t dmq_lock = PTHREAD_MUTEX_INITIALIZER;
-
-// Save the body of this message into the DMQ
-void defer_message(struct mqtt_response_publish *message) {
-    int topic_len, payload_len;
-    struct deferred_message *node;
-
-    // copy topic
-    node = malloc(sizeof(struct deferred_message));
-    topic_len = message->topic_name_size;
-    if (topic_len > MQTT_ID_MAX_LENGTH) {
-        topic_len = MQTT_ID_MAX_LENGTH;
-    }
-    memset(node->topic, 0, MQTT_ID_MAX_LENGTH + 1);
-    memcpy(node->topic, message->topic_name, topic_len);
-
-    // copy payload
-    payload_len = node->payload_len = message->application_message_size;
-    if (payload_len > 0 && message->application_message != NULL) {
-        node->payload = malloc(payload_len);
-        memcpy(node->payload, message->application_message, payload_len);
-    }
-    else {
-        node->payload = NULL;
-    }
-
-    // enqueue node
-    pthread_mutex_lock(&dmq_lock);
-    if (dmq_head == NULL || dmq_tail == NULL) {
-        dmq_head = dmq_tail = node;
-    }
-    else {
-        dmq_tail->next = node;
-        dmq_tail = node;
-    }
-    node->next = NULL;
-    pthread_mutex_unlock(&dmq_lock);
-}
-
-// Deallocate a DMQ entry
-void free_deferred_message(struct deferred_message *node) {
-    if (node->payload != NULL) {
-        free(node->payload);
-    }
-    free(node);
-}
-
-// Process each DMQ entry. Free them afterwards.
-void service_dmq(void) {
-    for (;;) {
-        struct deferred_message *here = NULL;
-
-        // Pop message off the queue
-        pthread_mutex_lock(&dmq_lock);
-        if (dmq_head != NULL) {
-            here = dmq_head;
-            dmq_head = dmq_head->next;
-            if (dmq_head == NULL) {
-                // the queue is now empty, so clear the tail
-                dmq_tail = NULL;
-            }
-        }
-        pthread_mutex_unlock(&dmq_lock);
-
-        if (here == NULL) break;
-
-        gm_route_message(here);
-        free_deferred_message(here);
-    }
-}
-
 // callbacks
 
 // Called when we get an MQTT message
@@ -157,7 +82,7 @@ void has_message(void **state, struct mqtt_response_publish *message) {
     }
     putchar('\n');
     // save message for later
-    defer_message(message);
+    gm_defer_message(message);
 }
 
 // Called when we we need to (re)connect to the broker
@@ -225,6 +150,20 @@ void attempt_reconnect(void) {
     puts("Connected.");
 }
 
+// Bail out of the broker connection loop, one way or another, if asked to.
+// A full shutdown request takes priority: it's polled here (rather than
+// waiting for gm_service_events() to notice it) because this loop can block
+// for a long time on its own, retrying a connection independently of the
+// normal MQTT event loop.
+static void check_connect_abort(void) {
+    if (gm_shutdown_pending()) {
+        gm_shutdown();
+    }
+    if (gm_mqtt_stop) {
+        pthread_exit(NULL);
+    }
+}
+
 // establish a TCP connection to the broker, returning the socket.
 // Retries indefinitely with exponential backoff (capped at MAX_DELAY)
 // on any failure, since this is also used to reconnect after a drop.
@@ -238,9 +177,7 @@ int connect_to_broker(void) {
 
     for (;;) {
         // give up on connecting (and let this thread exit) if we're shutting down
-        if (gm_mqtt_stop) {
-            pthread_exit(NULL);
-        }
+        check_connect_abort();
 
         // address lookup
         memset(&hint, 0, sizeof hint);
@@ -281,9 +218,7 @@ int connect_to_broker(void) {
         // sleep in 1-second increments so a shutdown request is noticed promptly
         // even during a long backoff delay
         for (int slept = 0; slept < delay; slept++) {
-            if (gm_mqtt_stop) {
-                pthread_exit(NULL);
-            }
+            check_connect_abort();
             sleep(1);
         }
         delay *= 2;
@@ -432,7 +367,7 @@ void do_mqtt_events() {
     }
 
     // Actually handle messages
-    service_dmq();
+    gm_service_events();
 }
 
 // Announce the node's existence to the grid
@@ -507,8 +442,10 @@ void gm_disconnect() {
     gm_mqtt_params.broker_bio = NULL;
 }
 
-// Disconnect from the broker immediately without calling into the MQTT library.
-// (This avoids deadlocking in a signal handler.)
+// Disconnect from the broker immediately without calling into the MQTT library,
+// then exit. Called either from the "exit" MQTT command or from gm_service_events()
+// once a signal-requested shutdown is noticed, so always in normal thread context
+// (never from a signal handler directly).
 void gm_shutdown() {
     stop_mqtt_thread();
     BIO_free_all(gm_mqtt_params.broker_bio);
