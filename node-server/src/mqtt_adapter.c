@@ -280,14 +280,9 @@ BIO *activate_tls(BIO *socket_bio) {
                 usleep(50);
             }
             else {
-                int ssl_err;
-                warn("BIO_do_handshake(tls_bio) = %d", rv);
-                ssl_err = SSL_get_error(ssl, rv);
-                warnx("SSL_get_error() = %d", ssl_err);
                 ssl_die("TLS handshake failed");
             }
         }
-        else puts("h");
     }
 
     // make sure everything is ok
@@ -299,9 +294,17 @@ BIO *activate_tls(BIO *socket_bio) {
 }
 
 void ssl_die(const char *message) {
-    // TODO: don't use ERR_print_errors_* because that output is *hideous*
+    unsigned long code;
+
     warnx("%s", message);
-    ERR_print_errors_fp(stderr);
+    while ((code = ERR_get_error()) != 0) {
+        const char *reason = ERR_reason_error_string(code);
+        if (reason != NULL) {
+            warnx("ssl: %s", reason);
+        } else {
+            warnx("ssl: unknown error %lu", code);
+        }
+    }
     exit(1);
 }
 
