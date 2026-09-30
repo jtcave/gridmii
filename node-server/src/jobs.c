@@ -72,7 +72,7 @@ int spawn_job(struct job *jobspec, jid_t job_id, write_callback on_write,
         stderr_pipe[2] = {-1, -1};
     int pt_primary = -1;
     const char *replica_path;
-    const char *old_term;
+    const char *old_term = "";
 
     // reject null callback
     if (on_write == NULL) {
