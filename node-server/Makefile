@@ -1,5 +1,5 @@
 CFLAGS=-Wall -Os
-LDLIBS=-ljansson -lcrypto -lssl
+LDLIBS=-ljansson -lcrypto -lssl -lpthread
 
 # pull in Homebrew includes/libs on macOS
 OSNAME := $(shell uname -s)
