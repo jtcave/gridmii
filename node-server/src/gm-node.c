@@ -157,6 +157,9 @@ void sigint_cleanup(int signum) {
     if (signum == SIGINT) {
         gm_request_shutdown();
     }
+    else if (signum == SIGINFO) {
+        gm_request_memory_report();
+    }
     else {
         static const char msg[] = "signal handler called on unexpected signal\n";
         write(STDERR_FILENO, msg, sizeof(msg) - 1);
@@ -191,6 +194,13 @@ int main(int argc, char *const *argv) {
     if (sigaction(SIGINT, &sa, NULL) != 0) {
         err(1, "could not set SIGINT handler");
     }
+
+    // SIGINFO prints a memory report (also handled by sigint_cleanup)
+    sa.sa_flags = SA_RESTART;
+    if (sigaction(SIGINFO, &sa, NULL) != 0) {
+        err(1, "could not set SIGINFO handler");
+    }
+    sa.sa_flags = 0;
 
     // ignore SIGPIPE
     sa.sa_handler = SIG_IGN;

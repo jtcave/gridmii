@@ -75,6 +75,10 @@ void gm_service_events(void) {
         gm_shutdown();
     }
 
+    if (gm_memory_report_pending()) {
+        gm_memory_report(stderr, "SIGINFO");
+    }
+
     for (;;) {
         struct deferred_message *here = NULL;
 
