@@ -31,7 +31,6 @@
 #endif
 
 #include <stdint.h>
-#include <stdio.h>
 #include <stdbool.h>
 #include <sys/types.h>
 #include <pthread.h>
@@ -77,18 +76,6 @@ extern bool gm_in_child;
 
 // the running MQTT thread's id (0 before it's started)
 extern pthread_t mqtt_thread;
-
-/// declarations - memory report ///
-
-// Print each mapping's virtual and resident size to `out`, then totals per object.
-void gm_memory_report(FILE *out, const char *label);
-
-// Request a memory report at the next gm_service_events().
-// Async-signal-safe, so it can be called from the SIGINFO handler.
-void gm_request_memory_report(void);
-
-// Returns true (and clears the request) if a memory report was requested.
-bool gm_memory_report_pending(void);
 
 /// declarations - event queue ///
 
